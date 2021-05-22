@@ -14,8 +14,7 @@
         (class ObjectRoot
             (attribute privilegeToDelete reliable timestamp)
             (class RTIprivate)
-            (class Customer
-            )
+            (class ShoppingFederate)
         )
     )
     (interactions
