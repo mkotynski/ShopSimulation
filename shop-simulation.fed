@@ -1,0 +1,34 @@
+(FED
+    (Federation shop-simulation)
+    (FEDversion v1.3)
+    (spaces
+        (space TestSpace
+            (dimension TestDimension)
+        )
+        (space OtherSpace
+            (dimension OtherDimension)
+        )
+    )
+
+    (objects
+        (class ObjectRoot
+            (attribute privilegeToDelete reliable timestamp)
+            (class RTIprivate)
+            (class Customer
+            )
+        )
+    )
+    (interactions
+        (class InteractionRoot reliable timestamp
+            (class RTIprivate reliable timestamp)
+            (class Finish reliable timestamp)
+            (class AddProduct reliable timestamp TestSpace
+                (parameter quantity)
+            )
+            (class GetProduct reliable timestamp TestSpace
+                (parameter quantity)
+            )
+        )
+    )
+)
+
