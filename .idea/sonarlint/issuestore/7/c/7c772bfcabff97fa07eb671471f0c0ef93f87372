@@ -1,0 +1,18 @@
+
+p
+java:S1450"URemove the "fedamb" field and declare it as a local variable in the relevant methods.(£¬şÿÿÿÿ
+p
+java:S1450"URemove the "rtiamb" field and declare it as a local variable in the relevant methods.(î­úÙûÿÿÿÿ
+7
+java:S1170"!Make this final field static too.(ùéú¹
+M	java:S106;"9Replace this use of System.out or System.err by a logger.(øÇ×D
+E
+java:S1068"*Remove this unused "fedamb" private field.(£¬şÿÿÿÿ
+B
+java:S1068",Remove this unused "timeStep" private field.(ùéú¹
+D
+java:S1068")Remove this unused "stock" private field.(õ¯ÿˆùÿÿÿÿ
+J
+java:S1068"4Remove this unused "storageHlaHandle" private field.(Ä”ĞÄ
+F
+java:S1144+"0Remove this unused private "waitForUser" method.(Ç‹òÌ
