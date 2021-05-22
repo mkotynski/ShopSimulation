@@ -1,4 +1,4 @@
-package customer;
+package cashregister;
 
 import hla.rti.*;
 import hla.rti.jlc.EncodingHelpers;
@@ -12,12 +12,11 @@ import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.util.Random;
 
-public class CustomerFederate {
-
+public class CashRegisterFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private CustomerAmbassador fedamb;
+  private CashRegisterAmbassador fedamb;
   private final double timeStep = 10.0;
   private int stock = 10;
   private int storageHlaHandle;
@@ -38,9 +37,9 @@ public class CustomerFederate {
       return;
     }
 
-    fedamb = new CustomerAmbassador();
-    rtiamb.joinFederationExecution("CustomerFederate", "ShoppingFederate", fedamb);
-    log("Joined Federation as CustomerFederate");
+    fedamb = new CashRegisterAmbassador();
+    rtiamb.joinFederationExecution("CashRegisterFederate", "ExampleFederation", fedamb);
+    log("Joined Federation as CashRegisterFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
@@ -144,12 +143,12 @@ public class CustomerFederate {
   }
 
   private void log(String message) {
-    System.out.println("CustomerFederate  : " + message);
+    System.out.println("CashRegisterFederate  : " + message);
   }
 
   public static void main(String[] args) {
     try {
-      new CustomerFederate().runFederate();
+      new CashRegisterFederate().runFederate();
     } catch (RTIexception e) {
       e.printStackTrace();
     }
