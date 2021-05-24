@@ -1,0 +1,32 @@
+
+
+java:S1186"€Add a nested comment explaining why this method is empty, throw an UnsupportedOperationException or complete the implementation.(Î¡¼Î8âî£™/
+]
+java:S1161‘":Add the "@Override" annotation above this method signature(´ááùÿÿÿÿ8âî£™/
+W
+java:S1161Â":Add the "@Override" annotation above this method signature(ñ‚³x8âî£™/
+\
+java:S1161@":Add the "@Override" annotation above this method signature(Õäóúÿÿÿÿ8âî£™/
+X
+java:S1161½":Add the "@Override" annotation above this method signature(ê¿¦À8âî£™/
+T	java:S106"9Replace this use of System.out or System.err by a logger.(¿Ôì8âî£™/
+\
+java:S1161T":Add the "@Override" annotation above this method signature(‡Ëëäûÿÿÿÿ8âî£™/
+W
+java:S1161L":Add the "@Override" annotation above this method signature( ú‡³8âî£™/
+W
+java:S11613":Add the "@Override" annotation above this method signature(§æ¥ó8âî£™/
+W
+java:S1161F":Add the "@Override" annotation above this method signature(€Ÿƒ8âî£™/
+W
+java:S1161"":Add the "@Override" annotation above this method signature(†Ëğ8âî£™/
+W
+java:S1161,":Add the "@Override" annotation above this method signature(ŒÙ‘ô8âî£™/
+W
+java:S1161:":Add the "@Override" annotation above this method signature(…ê„³8âî£™/
+\
+java:S1161[":Add the "@Override" annotation above this method signature(‡Ëëäûÿÿÿÿ8âî£™/
+\
+java:S1161'":Add the "@Override" annotation above this method signature(ÏÌá›øÿÿÿÿ8âî£™/
+]
+java:S1161‡":Add the "@Override" annotation above this method signature(´ááùÿÿÿÿ8âî£™/

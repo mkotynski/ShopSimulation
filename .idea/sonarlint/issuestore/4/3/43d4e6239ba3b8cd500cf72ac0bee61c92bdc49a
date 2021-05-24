@@ -1,0 +1,24 @@
+
+K
+java:S1125X")Remove the literal "false" boolean value.(ß“ïìûÿÿÿÿ8÷ÐÃ§™/
+K
+java:S11256")Remove the literal "false" boolean value.(éˆ»¼ýÿÿÿÿ8÷ÐÃ§™/
+n
+java:S2677K"LUse or store the value returned from "readLine" instead of throwing it away.(£­—âÿÿÿÿÿ8÷ÐÃ§™/
+<
+java:S2119ƒ"Save and re-use this "Random".(¡Å”¦8÷ÐÃ§™/
+Q
+java:S1068"4Remove this unused "storageHlaHandle" private field.(Ä”ÐÄ8÷ÐÃ§™/
+K
+java:S1068")Remove this unused "stock" private field.(õ¯ÿˆùÿÿÿÿ8÷ÐÃ§™/
+F
+java:S1125.")Remove the literal "false" boolean value.(–ò¡þ8÷ÐÃ§™/
+F
+java:S1125^")Remove the literal "false" boolean value.(«þž¹8÷ÐÃ§™/
+V	java:S106’"9Replace this use of System.out or System.err by a logger.(«ô¡‘8÷ÐÃ§™/
+I
+java:S1068",Remove this unused "timeStep" private field.(ùéú¹8÷ÐÃ§™/
+>
+java:S1170"!Make this final field static too.(ùéú¹8÷ÐÃ§™/
+:
+java:S2119k"Save and re-use this "Random".(¼ÝÅf8÷ÐÃ§™/
