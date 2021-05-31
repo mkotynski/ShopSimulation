@@ -5,21 +5,22 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.models.Customer;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 public class ShoppingFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private ShoppingAmbassador fedamb;
-  private final double timeStep = 10.0;
-  private int stock = 10;
-  private int storageHlaHandle;
+  private ShoppingAmbassador shoppingAmbassador;
+  private List<Customer> customersList = new ArrayList<>();
 
   public void runFederate() throws RTIexception {
 
@@ -27,7 +28,7 @@ public class ShoppingFederate {
 
     try {
       File fom = new File("shop-simulation.fed");
-      rtiamb.createFederationExecution("", fom.toURI().toURL());
+      rtiamb.createFederationExecution("Shop-Federation", fom.toURI().toURL());
       log("Created Federation");
     } catch (FederationExecutionAlreadyExists exists) {
       log("Didn't create federation, it already existed");
@@ -37,13 +38,13 @@ public class ShoppingFederate {
       return;
     }
 
-    fedamb = new ShoppingAmbassador();
-//    rtiamb.joinFederationExecution("ShoppingFederate", "ExampleFederation", fedamb);
-//    log("Joined Federation as CustomerFederate");
+    shoppingAmbassador = new ShoppingAmbassador(this);
+    rtiamb.joinFederationExecution("ShoppingFederate", "Shop-Federation", shoppingAmbassador);
+    log("Joined Federation as ShoppingFederate");
 
-//    rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
+    rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (shoppingAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -51,7 +52,7 @@ public class ShoppingFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (shoppingAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
@@ -61,12 +62,56 @@ public class ShoppingFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    while (fedamb.running) {
-      advanceTime(randomTime());
-      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+    while (shoppingAmbassador.running) {
+      double timeToAdvance = shoppingAmbassador.federateTime + shoppingAmbassador.federateLookahead;
+      advanceTime(shoppingAmbassador.federateLookahead);
+
+      for(int i = 0; i < customersList.size(); i++) {
+        if(customersList.get(i).getShoppingEndTime() <= shoppingAmbassador.federateTime) {
+          try {
+            endShoppingInteraction(customersList.get(i));
+          } catch (Exception exception) {
+            exception.printStackTrace();
+          }
+        }
+      }
+
+      if (!shoppingAmbassador.externalEvents.isEmpty()) {
+        shoppingAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
+        for (ExternalEvent externalEvent : shoppingAmbassador.externalEvents) {
+          shoppingAmbassador.federateTime = externalEvent.getTime();
+          if (externalEvent.getEventType() == ExternalEvent.EventType.ADD) {
+            this.customerStartShopping(externalEvent.getCustomerId());
+          }
+        }
+        shoppingAmbassador.externalEvents.clear();
+      }
+      if (shoppingAmbassador.grantedTime == timeToAdvance) {
+        timeToAdvance += shoppingAmbassador.federateLookahead;
+        shoppingAmbassador.federateTime = timeToAdvance;
+      }
       rtiamb.tick();
     }
   }
+
+  private void endShoppingInteraction(Customer customer) throws RTIinternalError, NameNotFound, FederateNotExecutionMember, InteractionClassNotDefined, RestoreInProgress, InteractionClassNotPublished, SaveInProgress, InvalidFederationTime, ConcurrentAccessAttempted, InteractionParameterNotDefined {
+    SuppliedParameters parameters =
+        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
+    byte[] id = EncodingHelpers.encodeInt(customer.getId());
+    byte[] shoppingTime = EncodingHelpers.encodeDouble(customer.getShoppingTime());
+    byte[] privilege = EncodingHelpers.encodeBoolean(customer.isPrivilege());
+    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStopShopping");
+
+    parameters.add(rtiamb.getParameterHandle("id", interactionHandle), id);
+    parameters.add(rtiamb.getParameterHandle("shoppingTime", interactionHandle), shoppingTime);
+    parameters.add(rtiamb.getParameterHandle("privilege", interactionHandle), privilege);
+
+    LogicalTime time = convertTime(shoppingAmbassador.federateTime + shoppingAmbassador.federateLookahead + 1.0);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    log("Klient id: " + customer.getId() + " zakonczyl zakupy");
+    customersList.remove(customer);
+  }
+
 
   private void waitForUser() {
     log(" >>>>>>>>>> Press Enter to Continue <<<<<<<<<<");
@@ -80,49 +125,36 @@ public class ShoppingFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(shoppingAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(shoppingAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (shoppingAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (shoppingAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    rtiamb.publishInteractionClass(addProductHandle);
-  }
+    int stopCustomerHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStopShopping");
+    rtiamb.publishInteractionClass(stopCustomerHandle);
 
-  private void sendInteraction(double timeStep) throws RTIexception {
-    SuppliedParameters parameters =
-        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-    Random random = new Random();
-    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
-
-    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-
-    parameters.add(quantityHandle, quantity);
-
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    int customerStartShoppingHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStartShopping");
+    shoppingAmbassador.addCustomerHandle = customerStartShoppingHandle;
+    rtiamb.subscribeInteractionClass(customerStartShoppingHandle);
   }
 
   private void advanceTime(double timestep) throws RTIexception {
-    log("requesting time advance for: " + timestep);
-    // request the advance
-    fedamb.isAdvancing = true;
-    LogicalTime newTime = convertTime(fedamb.federateTime + timestep);
+    shoppingAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(shoppingAmbassador.federateTime + timestep);
     rtiamb.timeAdvanceRequest(newTime);
-    while (fedamb.isAdvancing) {
+    while (shoppingAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }
@@ -152,5 +184,25 @@ public class ShoppingFederate {
     } catch (RTIexception e) {
       e.printStackTrace();
     }
+  }
+
+  private void customerStartShopping(int id) {
+    Customer customer = new Customer(id, randomPrivilege(), randomShoppingTime());
+    customer.setShoppingEndTime(customer.getShoppingTime() + shoppingAmbassador.federateTime);
+    customersList.add(customer);
+    log("Klient rozpoczyna zakupy: id " + customer.getId() + " czas zakupow: " + randomShoppingTime());
+  }
+
+  private boolean randomPrivilege() {
+    Random random = new Random();
+    int randomInt = random.nextInt(10);
+    if (randomInt == 3) return true;
+    else return false;
+  }
+
+  private double randomShoppingTime() {
+    Random random = new Random();
+    int numberOfProducts = random.nextInt(20);
+    return numberOfProducts * 1.0;
   }
 }

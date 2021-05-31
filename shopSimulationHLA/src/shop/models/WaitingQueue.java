@@ -1,27 +1,36 @@
 package shop.models;
 
-import java.util.PriorityQueue;
-import java.util.Queue;
+import java.util.LinkedList;
 import java.util.stream.Collectors;
 
 public class WaitingQueue {
-  Queue<Customer> customers;
+  int id;
+  LinkedList<Customer> customers;
 
-  public WaitingQueue(Queue<Customer> customers) {
-    this.customers = customers;
+  public WaitingQueue(int id) {
+    this.id = id;
+    this.customers = new LinkedList<>();
   }
 
-  public Queue<Customer> getCustomers() {
+  public LinkedList<Customer> getCustomers() {
     return customers;
   }
 
-  public void addCustomer(Customer customer) {
-    this.customers.add(customer);
+  public int getId() {
+    return id;
   }
 
-  public void addPrivilegedCustomer(Customer customer) {
-    Queue<Customer> privilegedCustomers = this.customers.stream().filter(Customer::isPrivilege).collect(Collectors.toCollection(PriorityQueue::new));
-    Queue<Customer> unprivilegedCustomers = this.customers.stream().filter(c -> !customer.isPrivilege()).collect(Collectors.toCollection(PriorityQueue::new));
+  public void addCustomer(Customer customer) {
+    if (customer.isPrivilege()) {
+      addPrivilegedCustomer(customer);
+    } else {
+      this.customers.add(customer);
+    }
+  }
+
+  private void addPrivilegedCustomer(Customer customer) {
+    LinkedList<Customer> privilegedCustomers = this.customers.stream().filter(Customer::isPrivilege).collect(Collectors.toCollection(LinkedList::new));
+    LinkedList<Customer> unprivilegedCustomers = this.customers.stream().filter(Customer::isUnprivilege).collect(Collectors.toCollection(LinkedList::new));
     privilegedCustomers.add(customer);
     privilegedCustomers.addAll(unprivilegedCustomers);
     this.customers = privilegedCustomers;
@@ -30,5 +39,9 @@ public class WaitingQueue {
   //TODO zmienic na poll - remove rzuca wyjatek gdy kolejka pusta natomiast poll zwraca null
   public Customer getFirstCustomer() {
       return this.customers.remove();
+  }
+
+  public int getSize() {
+    return customers.size();
   }
 }

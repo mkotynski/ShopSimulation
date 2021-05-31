@@ -1,13 +1,20 @@
 package shop.waitingqueue;
 
-import shop.customer.CustomerFederate;
-import hla.rti.*;
+import hla.rti.ArrayIndexOutOfBounds;
+import hla.rti.EventRetractionHandle;
+import hla.rti.LogicalTime;
+import hla.rti.ReceivedInteraction;
 import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.NullFederateAmbassador;
 import org.portico.impl.hla13.types.DoubleTime;
+import shop.customer.CustomerFederate;
+import shop.models.Customer;
+
+import java.util.ArrayList;
 
 public class WaitingQueueAmbassador extends NullFederateAmbassador {
   protected double federateTime = 0.0;
+  protected double grantedTime = 0.0;
   protected double federateLookahead = 1.0;
 
   protected boolean isRegulating = false;
@@ -18,6 +25,10 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
   protected boolean isReadyToRun = false;
 
   protected boolean running = true;
+
+  protected int customerStopShoppingHandle = 0;
+
+  protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
 
   public WaitingQueueAmbassador() {
   }
@@ -66,57 +77,6 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
     this.isAdvancing = false;
   }
 
-  public void discoverObjectInstance(int theObject,
-                                     int theObjectClass,
-                                     String objectName) {
-    log("Discoverd Object: handle=" + theObject + ", classHandle=" +
-        theObjectClass + ", name=" + objectName);
-  }
-
-  public void reflectAttributeValues(int theObject,
-                                     ReflectedAttributes theAttributes,
-                                     byte[] tag) {
-    reflectAttributeValues(theObject, theAttributes, tag, null, null);
-  }
-
-  public void reflectAttributeValues(int theObject,
-                                     ReflectedAttributes theAttributes,
-                                     byte[] tag,
-                                     LogicalTime theTime,
-                                     EventRetractionHandle retractionHandle) {
-    StringBuilder builder = new StringBuilder("Reflection for object:");
-
-    // print the handle
-    builder.append(" handle=" + theObject);
-    // print the tag
-    builder.append(", tag=" + EncodingHelpers.decodeString(tag));
-    // print the time (if we have it) we'll get null if we are just receiving
-    // a forwarded call from the other reflect callback above
-    if (theTime != null) {
-      builder.append(", time=" + convertTime(theTime));
-    }
-
-    // print the attribute information
-    builder.append(", attributeCount=" + theAttributes.size());
-    builder.append("\n");
-    for (int i = 0; i < theAttributes.size(); i++) {
-      try {
-        // print the attibute handle
-        builder.append("\tattributeHandle=");
-        builder.append(theAttributes.getAttributeHandle(i));
-        // print the attribute value
-        builder.append(", attributeValue=");
-        builder.append(
-            EncodingHelpers.decodeString(theAttributes.getValue(i)));
-        builder.append("\n");
-      } catch (ArrayIndexOutOfBounds aioob) {
-        // won't happen
-      }
-    }
-
-    log(builder.toString());
-  }
-
   public void receiveInteraction(int interactionClass,
                                  ReceivedInteraction theInteraction,
                                  byte[] tag) {
@@ -132,46 +92,16 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
                                  LogicalTime theTime,
                                  EventRetractionHandle eventRetractionHandle) {
     StringBuilder builder = new StringBuilder("Interaction Received:");
-
-    // print the handle
-    builder.append(" handle=" + interactionClass);
-    // print the tag
-    builder.append(", tag=" + EncodingHelpers.decodeString(tag));
-    // print the time (if we have it) we'll get null if we are just receiving
-    // a forwarded call from the other reflect callback above
-    if (theTime != null) {
-      builder.append(", time=" + convertTime(theTime));
-    }
-
-    // print the parameer information
-    builder.append(", parameterCount=" + theInteraction.size());
-    builder.append("\n");
-    for (int i = 0; i < theInteraction.size(); i++) {
+    if (interactionClass == customerStopShoppingHandle) {
       try {
-        // print the parameter handle
-        builder.append("\tparamHandle=");
-        builder.append(theInteraction.getParameterHandle(i));
-        // print the parameter value
-        builder.append(", paramValue=");
-        builder.append(
-            EncodingHelpers.decodeString(theInteraction.getValue(i)));
-        builder.append("\n");
-      } catch (ArrayIndexOutOfBounds aioob) {
-        // won't happen
+        int id = EncodingHelpers.decodeInt(theInteraction.getValue(0));
+        double shoppingTime = EncodingHelpers.decodeDouble(theInteraction.getValue(1));
+        boolean privilege = EncodingHelpers.decodeBoolean(theInteraction.getValue(2));
+
+        double time = convertTime(theTime);
+        externalEvents.add(new ExternalEvent(new Customer(id, privilege, shoppingTime), ExternalEvent.EventType.ADD, time));
+      } catch (ArrayIndexOutOfBounds ignored) {
       }
     }
-
-    log(builder.toString());
-  }
-
-  public void removeObjectInstance(int theObject, byte[] userSuppliedTag) {
-    log("Object Removed: handle=" + theObject);
-  }
-
-  public void removeObjectInstance(int theObject,
-                                   byte[] userSuppliedTag,
-                                   LogicalTime theTime,
-                                   EventRetractionHandle retractionHandle) {
-    log("Object Removed: handle=" + theObject);
   }
 }
