@@ -14,18 +14,25 @@
         (class ObjectRoot
             (attribute privilegeToDelete reliable timestamp)
             (class RTIprivate)
-            (class ShoppingFederate)
+            (class WaitingQueue
+                (attribute size reliable timestamp TestSpace)
+            )
+            (class Statistics
+                (attribute queueSize reliable timestamp TestSpace)
+            )
         )
     )
     (interactions
         (class InteractionRoot reliable timestamp
             (class RTIprivate reliable timestamp)
             (class Finish reliable timestamp)
-            (class AddProduct reliable timestamp TestSpace
-                (parameter quantity)
+            (class CustomerStartShopping reliable timestamp TestSpace
+                (parameter id)
             )
-            (class GetProduct reliable timestamp TestSpace
-                (parameter quantity)
+            (class CustomerStopShopping reliable timestamp TestSpace
+                (parameter id)
+                (parameter shoppingTime)
+                (parameter privilege)
             )
         )
     )

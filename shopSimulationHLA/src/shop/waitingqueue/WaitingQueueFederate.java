@@ -1,33 +1,38 @@
 package shop.waitingqueue;
 
 import hla.rti.*;
-import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.models.Customer;
+import shop.models.WaitingQueue;
+import shop.waitingqueue.ExternalEvent;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Random;
 
 public class WaitingQueueFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private WaitingQueueAmbassador fedamb;
+  private WaitingQueueAmbassador waitingQueueAmbassador;
   private final double timeStep = 10.0;
-  private int stock = 10;
-  private int storageHlaHandle;
+  private int numberOfQueues = 5;
+  private List<WaitingQueue> waitingQueueList;
 
-  public void runFederate() throws RTIexception {
+  public void runFederate() throws Exception {
 
     rtiamb = RtiFactoryFactory.getRtiFactory().createRtiAmbassador();
 
     try {
       File fom = new File("shop-simulation.fed");
-      rtiamb.createFederationExecution("", fom.toURI().toURL());
+      rtiamb.createFederationExecution("Shop-Federation", fom.toURI().toURL());
       log("Created Federation");
     } catch (FederationExecutionAlreadyExists exists) {
       log("Didn't create federation, it already existed");
@@ -37,13 +42,13 @@ public class WaitingQueueFederate {
       return;
     }
 
-    fedamb = new WaitingQueueAmbassador();
-    rtiamb.joinFederationExecution("WaitingQueueFederate", "ExampleFederation", fedamb);
-    log("Joined Federation as CustomerFederate");
+    waitingQueueAmbassador = new WaitingQueueAmbassador();
+    rtiamb.joinFederationExecution("WaitingQueueFederate", "Shop-Federation", waitingQueueAmbassador);
+    log("Joined Federation as WaitingQueueFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (waitingQueueAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -51,7 +56,7 @@ public class WaitingQueueFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (waitingQueueAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
@@ -61,10 +66,42 @@ public class WaitingQueueFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    while (fedamb.running) {
-      advanceTime(randomTime());
-      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+    createWaitingQueue(numberOfQueues);
+
+    while (waitingQueueAmbassador.running) {
+      double timeToAdvance = waitingQueueAmbassador.federateTime + timeStep;
+      advanceTime(timeStep);
+
+      if (!waitingQueueAmbassador.externalEvents.isEmpty()) {
+        waitingQueueAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
+        for (ExternalEvent externalEvent : waitingQueueAmbassador.externalEvents) {
+          waitingQueueAmbassador.federateTime = externalEvent.getTime();
+          if (externalEvent.getEventType() == ExternalEvent.EventType.ADD) {
+            this.addToShortesQueue(externalEvent.getCustomer());
+          }
+        }
+        waitingQueueAmbassador.externalEvents.clear();
+      }
+      if (waitingQueueAmbassador.grantedTime == timeToAdvance) {
+        timeToAdvance += waitingQueueAmbassador.federateLookahead;
+        waitingQueueAmbassador.federateTime = timeToAdvance;
+      }
       rtiamb.tick();
+    }
+  }
+
+  private void addToShortesQueue(Customer customer) throws Exception {
+    WaitingQueue shortestQueue = waitingQueueList.stream()
+        .min(Comparator.comparingInt(WaitingQueue::getSize))
+        .orElseThrow(() -> new Exception("Brak kolejek!!!"));
+    shortestQueue.addCustomer(customer);
+    log("Klient id: " + customer.getId() + " dodany do kolejki nr: " + shortestQueue.getId());
+  }
+
+  private void createWaitingQueue(int numberOfQueues) {
+    waitingQueueList = new ArrayList<>(numberOfQueues);
+    for (int i = 0; i < numberOfQueues; i++) {
+      waitingQueueList.add(new WaitingQueue(i));
     }
   }
 
@@ -80,49 +117,34 @@ public class WaitingQueueFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(waitingQueueAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(waitingQueueAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (waitingQueueAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (waitingQueueAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    rtiamb.publishInteractionClass(addProductHandle);
-  }
-
-  private void sendInteraction(double timeStep) throws RTIexception {
-    SuppliedParameters parameters =
-        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-    Random random = new Random();
-    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
-
-    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-
-    parameters.add(quantityHandle, quantity);
-
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    int customerStopShoppingHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStopShopping");
+    waitingQueueAmbassador.customerStopShoppingHandle = customerStopShoppingHandle;
+    rtiamb.subscribeInteractionClass(customerStopShoppingHandle);
   }
 
   private void advanceTime(double timestep) throws RTIexception {
-    log("requesting time advance for: " + timestep);
     // request the advance
-    fedamb.isAdvancing = true;
-    LogicalTime newTime = convertTime(fedamb.federateTime + timestep);
+    waitingQueueAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(waitingQueueAmbassador.federateTime + timestep);
     rtiamb.timeAdvanceRequest(newTime);
-    while (fedamb.isAdvancing) {
+    while (waitingQueueAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }
@@ -146,7 +168,7 @@ public class WaitingQueueFederate {
     System.out.println("WaitingQueueFederate  : " + message);
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     try {
       new WaitingQueueFederate().runFederate();
     } catch (RTIexception e) {

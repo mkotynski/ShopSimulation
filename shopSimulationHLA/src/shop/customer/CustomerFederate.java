@@ -1,11 +1,10 @@
 package shop.customer;
 
 import hla.rti.*;
+import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
-import shop.Utils;
-import shop.models.Customer;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -18,9 +17,8 @@ public class CustomerFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private CustomerAmbassador fedamb;
+  private CustomerAmbassador customerAmbassador;
 
-  private double nextClientTime;
   private int numberOfCustomers = 0;
 
   public void runFederate() throws RTIexception {
@@ -28,8 +26,8 @@ public class CustomerFederate {
     rtiamb = RtiFactoryFactory.getRtiFactory().createRtiAmbassador();
 
     try {
-      File fom = new File("shop-simulation.fed");
-      rtiamb.createFederationExecution("ShopFederation", fom.toURI().toURL());
+//      File fom = new File("shop-simulation.fed");
+      rtiamb.createFederationExecution("Shop-Federation", (new File("shop-simulation.fed")).toURI().toURL());
       log("Created Federation");
     } catch (FederationExecutionAlreadyExists exists) {
       log("Didn't create federation, it already existed");
@@ -39,13 +37,13 @@ public class CustomerFederate {
       return;
     }
 
-    fedamb = new CustomerAmbassador();
-    rtiamb.joinFederationExecution("CustomerFederate", "ShopFederation", fedamb);
+    customerAmbassador = new CustomerAmbassador();
+    rtiamb.joinFederationExecution("CustomerFederate", "Shop-Federation", customerAmbassador);
     log("Joined Federation as CustomerFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (customerAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -53,23 +51,19 @@ public class CustomerFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (customerAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
     enableTimePolicy();
     log("Time Policy Enabled");
 
-//    publishAndSubscribe();
-//    log("Published and Subscribed");
+    publishAndSubscribe();
+    log("Published and Subscribed");
 
-    nextClientTime = (int)(Utils.normal(150, 50) + fedamb.federateTime);
-    log("NOWY KLIENT ZA: " + nextClientTime);
-
-    while (fedamb.running) {
-      advanceTime();
-      generateNewClient();
-//      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+    while (customerAmbassador.running) {
+      generateNewClient(customerAmbassador.federateTime + customerAmbassador.federateLookahead);
+      advanceTime(randomTime());
       rtiamb.tick();
     }
   }
@@ -86,55 +80,41 @@ public class CustomerFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(customerAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(customerAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (customerAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (customerAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
-//  private void publishAndSubscribe() throws RTIexception {
-//    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-//    rtiamb.publishInteractionClass(addProductHandle);
-//  }
+  private void publishAndSubscribe() throws RTIexception {
+    int addCustomerHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStartShopping");
+    rtiamb.publishInteractionClass(addCustomerHandle);
+  }
 
-//  private void sendInteraction(double timeStep) throws RTIexception {
-//    SuppliedParameters parameters =
-//        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-//    Random random = new Random();
-//    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
-//
-//    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-//    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-//
-//    parameters.add(quantityHandle, quantity);
-//
-//    LogicalTime time = convertTime(timeStep);
-//    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
-//  }
-
-  private void advanceTime() throws RTIexception {
+  private void advanceTime(double timestep) throws RTIexception {
+    //     log("requesting time advance for: " + timestep);
     // request the advance
-    fedamb.isAdvancing = true;
-//    log(fedamb.federateTime + "");
-    rtiamb.timeAdvanceRequest(convertTime(fedamb.federateTime+1.0));
-    while (fedamb.isAdvancing) {
+    customerAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(customerAmbassador.federateTime + timestep);
+    rtiamb.timeAdvanceRequest(newTime);
+    while (customerAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }
 
   private double randomTime() {
     Random r = new Random();
-    return (100 + (300 * r.nextDouble()));
+    return 10 + (9 * r.nextDouble());
   }
 
   private LogicalTime convertTime(double time) {
@@ -159,14 +139,19 @@ public class CustomerFederate {
     }
   }
 
-  private void generateNewClient() {
-    if(fedamb.federateTime == nextClientTime) {
-      //TODO Wrzucenie go na zakupy - komunikacja
-      Customer customer = new Customer(numberOfCustomers, (int) Utils.normal(5, 5) == 3 || (int) Utils.normal(5, 5) == 7);
 
-      log("NOWY KLIENT: " + customer.getId() + " " + customer.isPrivilege());
-      numberOfCustomers++;
-      nextClientTime = (int) (Utils.normal(150, 50) + fedamb.federateTime);
-    }
+  private void generateNewClient(double timeStep) throws RTIexception {
+    SuppliedParameters parameters =
+        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
+    numberOfCustomers++;
+    byte[] id = EncodingHelpers.encodeInt(numberOfCustomers);
+    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStartShopping");
+    int customerHandle = rtiamb.getParameterHandle("id", interactionHandle);
+
+    parameters.add(customerHandle, id);
+
+    LogicalTime time = convertTime(timeStep);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    log("Nowy klient, id: " + numberOfCustomers + " czas: " + customerAmbassador.federateTime);
   }
 }

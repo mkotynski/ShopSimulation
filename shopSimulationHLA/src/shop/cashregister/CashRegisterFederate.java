@@ -17,9 +17,6 @@ public class CashRegisterFederate {
 
   private RTIambassador rtiamb;
   private CashRegisterAmbassador fedamb;
-  private final double timeStep = 10.0;
-  private int stock = 10;
-  private int storageHlaHandle;
 
   public void runFederate() throws RTIexception {
 
@@ -27,7 +24,7 @@ public class CashRegisterFederate {
 
     try {
       File fom = new File("shop-simulation.fed");
-      rtiamb.createFederationExecution("", fom.toURI().toURL());
+      rtiamb.createFederationExecution("Shop-Federation", fom.toURI().toURL());
       log("Created Federation");
     } catch (FederationExecutionAlreadyExists exists) {
       log("Didn't create federation, it already existed");
@@ -38,7 +35,7 @@ public class CashRegisterFederate {
     }
 
     fedamb = new CashRegisterAmbassador();
-    rtiamb.joinFederationExecution("CashRegisterFederate", "ExampleFederation", fedamb);
+    rtiamb.joinFederationExecution("CashRegisterFederate", "Shop-Federation", fedamb);
     log("Joined Federation as CashRegisterFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
@@ -63,7 +60,7 @@ public class CashRegisterFederate {
 
     while (fedamb.running) {
       advanceTime(randomTime());
-      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+
       rtiamb.tick();
     }
   }
@@ -99,21 +96,6 @@ public class CashRegisterFederate {
   private void publishAndSubscribe() throws RTIexception {
     int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
     rtiamb.publishInteractionClass(addProductHandle);
-  }
-
-  private void sendInteraction(double timeStep) throws RTIexception {
-    SuppliedParameters parameters =
-        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-    Random random = new Random();
-    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
-
-    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-
-    parameters.add(quantityHandle, quantity);
-
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
   }
 
   private void advanceTime(double timestep) throws RTIexception {
