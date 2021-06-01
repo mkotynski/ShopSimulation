@@ -5,18 +5,24 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.models.CashRegister;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
+//TODO odebrac interakcje z id uzytkownika itd
+//TODO rozpoczac obsluge klienta i usunac go ze sklepu
 public class CashRegisterFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private CashRegisterAmbassador fedamb;
+  private CashRegisterAmbassador cashRegisterAmbassador;
+  private List<CashRegister> cashRegisterList = new ArrayList<>();
 
   public void runFederate() throws RTIexception {
 
@@ -34,13 +40,13 @@ public class CashRegisterFederate {
       return;
     }
 
-    fedamb = new CashRegisterAmbassador();
-    rtiamb.joinFederationExecution("CashRegisterFederate", "Shop-Federation", fedamb);
+    cashRegisterAmbassador = new CashRegisterAmbassador();
+    rtiamb.joinFederationExecution("CashRegisterFederate", "Shop-Federation", cashRegisterAmbassador);
     log("Joined Federation as CashRegisterFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (cashRegisterAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -48,7 +54,7 @@ public class CashRegisterFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (cashRegisterAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
@@ -58,11 +64,55 @@ public class CashRegisterFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    while (fedamb.running) {
-      advanceTime(randomTime());
+    while (cashRegisterAmbassador.running) {
+      double timeToAdvance = cashRegisterAmbassador.federateTime + cashRegisterAmbassador.federateLookahead;
+      advanceTime(cashRegisterAmbassador.federateLookahead);
 
+      for (int i = 0; i < cashRegisterList.size(); i++) {
+        if (cashRegisterList.get(i).isFree()) {
+          try {
+            freeCashRegister(cashRegisterList.get(i).getId(), timeToAdvance + 1.0);
+          } catch (Exception exception) {
+            exception.printStackTrace();
+          }
+        }
+      }
+
+      if (!cashRegisterAmbassador.externalEvents.isEmpty()) {
+        cashRegisterAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
+        for (ExternalEvent externalEvent : cashRegisterAmbassador.externalEvents) {
+          cashRegisterAmbassador.federateTime = externalEvent.getTime();
+          if (externalEvent.getEventType() == ExternalEvent.EventType.ADD) {
+            createNewCashRegister();
+          }
+        }
+        cashRegisterAmbassador.externalEvents.clear();
+      }
+      if (cashRegisterAmbassador.grantedTime == timeToAdvance) {
+        timeToAdvance += cashRegisterAmbassador.federateLookahead;
+        cashRegisterAmbassador.federateTime = timeToAdvance;
+      }
       rtiamb.tick();
     }
+  }
+
+  private void createNewCashRegister() {
+    cashRegisterList.add(new CashRegister(cashRegisterList.size() + 1));
+    log("Otworzono nowa kase nr: " + cashRegisterList.size());
+  }
+
+  private void freeCashRegister(int id, double timeStep) throws RTIexception {
+    SuppliedParameters parameters =
+        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
+    byte[] idVar = EncodingHelpers.encodeInt(id);
+    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.FreeCashRegister");
+    int idHandle = rtiamb.getParameterHandle("id", interactionHandle);
+
+    parameters.add(idHandle, idVar);
+
+    LogicalTime time = convertTime(timeStep);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    log("Kasa, id: " + id + " jest wolna, czas: " + cashRegisterAmbassador.federateTime);
   }
 
   private void waitForUser() {
@@ -77,34 +127,42 @@ public class CashRegisterFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(cashRegisterAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(cashRegisterAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (cashRegisterAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (cashRegisterAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    rtiamb.publishInteractionClass(addProductHandle);
+    int simObjectClassHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", simObjectClassHandle);
+
+    AttributeHandleSet attributes = RtiFactoryFactory.getRtiFactory()
+        .createAttributeHandleSet();
+    attributes.add(numberOfQueuesHandle);
+
+    rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
+
+    int freeCashRegisterHandle = rtiamb.getInteractionClassHandle("InteractionRoot.FreeCashRegister");
+    rtiamb.publishInteractionClass(freeCashRegisterHandle);
   }
 
   private void advanceTime(double timestep) throws RTIexception {
-    log("requesting time advance for: " + timestep);
     // request the advance
-    fedamb.isAdvancing = true;
-    LogicalTime newTime = convertTime(fedamb.federateTime + timestep);
+    cashRegisterAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(cashRegisterAmbassador.federateTime + timestep);
     rtiamb.timeAdvanceRequest(newTime);
-    while (fedamb.isAdvancing) {
+    while (cashRegisterAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }

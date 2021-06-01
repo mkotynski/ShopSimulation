@@ -5,9 +5,13 @@ import hla.rti.*;
 import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.NullFederateAmbassador;
 import org.portico.impl.hla13.types.DoubleTime;
+import shop.cashregister.ExternalEvent;
+
+import java.util.ArrayList;
 
 public class CashRegisterAmbassador extends NullFederateAmbassador {
   protected double federateTime = 0.0;
+  protected double grantedTime = 0.0;
   protected double federateLookahead = 1.0;
 
   protected boolean isRegulating = false;
@@ -18,6 +22,12 @@ public class CashRegisterAmbassador extends NullFederateAmbassador {
   protected boolean isReadyToRun = false;
 
   protected boolean running = true;
+
+  protected int waitingQueueHandle;
+
+  protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
+
+  int numberOfQueues = 0;
 
   public CashRegisterAmbassador() {
   }
@@ -62,8 +72,37 @@ public class CashRegisterAmbassador extends NullFederateAmbassador {
   }
 
   public void timeAdvanceGrant(LogicalTime theTime) {
-    this.federateTime = convertTime(theTime);
+    this.grantedTime = convertTime(theTime);
     this.isAdvancing = false;
+  }
+
+  public void reflectAttributeValues(int theObject,
+                                     ReflectedAttributes theAttributes, byte[] tag) {
+    reflectAttributeValues(theObject, theAttributes, tag, null, null);
+  }
+
+  public void reflectAttributeValues( int theObject,
+                                      ReflectedAttributes theAttributes,
+                                      byte[] tag,
+                                      LogicalTime theTime,
+                                      EventRetractionHandle retractionHandle ) {
+
+    try {
+      double time = convertTime(theTime);
+      int queueSize = EncodingHelpers.decodeInt(theAttributes.getValue(0));
+      if (numberOfQueues < queueSize) {
+        externalEvents.add(new ExternalEvent(queueSize, ExternalEvent.EventType.ADD, time));
+        numberOfQueues++;
+      }
+    } catch (ArrayIndexOutOfBounds arrayIndexOutOfBounds) {
+      arrayIndexOutOfBounds.printStackTrace();
+    }
+  }
+
+  @Override
+  public void discoverObjectInstance(int theObject, int theObjectClass, String objectName) throws CouldNotDiscover, ObjectClassNotKnown, FederateInternalError {
+    System.out.println("Pojawil sie nowy obiekt typu WaitingQueue");
+    waitingQueueHandle = theObject;
   }
 
 }

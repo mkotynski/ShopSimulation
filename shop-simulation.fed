@@ -15,7 +15,7 @@
             (attribute privilegeToDelete reliable timestamp)
             (class RTIprivate)
             (class WaitingQueue
-                (attribute size reliable timestamp TestSpace)
+                (attribute numberOfQueues reliable timestamp TestSpace)
             )
             (class Statistics
                 (attribute queueSize reliable timestamp TestSpace)
@@ -33,6 +33,14 @@
                 (parameter id)
                 (parameter shoppingTime)
                 (parameter privilege)
+            )
+            (class FreeCashRegister reliable timestamp TestSpace
+                (parameter id)
+            )
+            (class StartCustomerService reliable timestamp TestSpace
+                (parameter customerId)
+                (parameter shoppingTime)
+                (parameter queueId)
             )
         )
     )

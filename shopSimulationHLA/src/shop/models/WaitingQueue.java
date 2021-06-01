@@ -6,10 +6,12 @@ import java.util.stream.Collectors;
 public class WaitingQueue {
   int id;
   LinkedList<Customer> customers;
+  int maxQueueSize;
 
-  public WaitingQueue(int id) {
+  public WaitingQueue(int id, int maxQueueSize) {
     this.id = id;
     this.customers = new LinkedList<>();
+    this.maxQueueSize = maxQueueSize;
   }
 
   public LinkedList<Customer> getCustomers() {
@@ -18,6 +20,18 @@ public class WaitingQueue {
 
   public int getId() {
     return id;
+  }
+
+  public int getMaxQueueSize() {
+    return maxQueueSize;
+  }
+
+  public boolean isFull() {
+    return this.maxQueueSize <= getSize();
+  }
+
+  public boolean isNotEmpty() {
+    return !this.customers.isEmpty();
   }
 
   public void addCustomer(Customer customer) {
@@ -36,9 +50,8 @@ public class WaitingQueue {
     this.customers = privilegedCustomers;
   }
 
-  //TODO zmienic na poll - remove rzuca wyjatek gdy kolejka pusta natomiast poll zwraca null
   public Customer getFirstCustomer() {
-      return this.customers.remove();
+    return this.customers.remove();
   }
 
   public int getSize() {
