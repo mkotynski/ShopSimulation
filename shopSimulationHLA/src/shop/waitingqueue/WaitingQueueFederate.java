@@ -1,30 +1,31 @@
 package shop.waitingqueue;
 
 import hla.rti.*;
+import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
 import shop.models.Customer;
 import shop.models.WaitingQueue;
-import shop.waitingqueue.ExternalEvent;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class WaitingQueueFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
   private WaitingQueueAmbassador waitingQueueAmbassador;
-  private final double timeStep = 10.0;
-  private int numberOfQueues = 5;
-  private List<WaitingQueue> waitingQueueList;
+  private final double timeStep = 1.0;
+  private int numberOfQueues = 0; //wartosc startowa - pierwszy klient -> otworzenie pierwszej kasy/kolejki
+  private int maxQueueSize = 20;
+  List<Integer> freeCashRegisterIds = new ArrayList<>();
+  private List<WaitingQueue> waitingQueueList = new ArrayList<>();
+  private int waitingQueueHLAObject = 0;
 
   public void runFederate() throws Exception {
 
@@ -66,11 +67,21 @@ public class WaitingQueueFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    createWaitingQueue(numberOfQueues);
+    registerObject();
+
+    createWaitingQueue();
 
     while (waitingQueueAmbassador.running) {
       double timeToAdvance = waitingQueueAmbassador.federateTime + timeStep;
       advanceTime(timeStep);
+
+      for(int i=0; i < freeCashRegisterIds.size(); i++) {
+        //TODO warunek nie przechodzi
+          if (waitingQueueList.get(freeCashRegisterIds.get(i)).isNotEmpty()) {
+            startCustomerService(waitingQueueList.get(freeCashRegisterIds.get(i)).getFirstCustomer(), freeCashRegisterIds.get(i), timeStep);
+            freeCashRegisterIds.remove(freeCashRegisterIds.get(i));
+          }
+      }
 
       if (!waitingQueueAmbassador.externalEvents.isEmpty()) {
         waitingQueueAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
@@ -79,18 +90,67 @@ public class WaitingQueueFederate {
           if (externalEvent.getEventType() == ExternalEvent.EventType.ADD) {
             this.addToShortesQueue(externalEvent.getCustomer());
           }
+          if (externalEvent.getEventType() == ExternalEvent.EventType.FREE) {
+            if (!freeCashRegisterIds.contains(externalEvent.getIdCashRegister())) {
+              freeCashRegisterIds.add(externalEvent.getIdCashRegister());
+            }
+          }
         }
         waitingQueueAmbassador.externalEvents.clear();
       }
       if (waitingQueueAmbassador.grantedTime == timeToAdvance) {
         timeToAdvance += waitingQueueAmbassador.federateLookahead;
+        updateHLAObject(timeToAdvance);
         waitingQueueAmbassador.federateTime = timeToAdvance;
       }
       rtiamb.tick();
     }
   }
 
+  private void startCustomerService(Customer customer, int idCashRegister, double timeStep) throws RTIinternalError, NameNotFound, FederateNotExecutionMember, InteractionClassNotDefined, RestoreInProgress, InteractionClassNotPublished, SaveInProgress, InvalidFederationTime, ConcurrentAccessAttempted, InteractionParameterNotDefined {
+    SuppliedParameters parameters =
+        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
+    byte[] customerId = EncodingHelpers.encodeInt(customer.getId());
+    byte[] shoppingTime = EncodingHelpers.encodeDouble(customer.getShoppingTime());
+    byte[] queueId = EncodingHelpers.encodeInt(idCashRegister);
+
+    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.StartCustomerService");
+    int customerIdHandle = rtiamb.getParameterHandle("customerId", interactionHandle);
+    int shoppingTimeHandle = rtiamb.getParameterHandle("shoppingTime", interactionHandle);
+    int queueIdHandle = rtiamb.getParameterHandle("queueId", interactionHandle);
+
+    parameters.add(customerIdHandle, customerId);
+    parameters.add(shoppingTimeHandle, shoppingTime);
+    parameters.add(queueIdHandle, queueId);
+
+    LogicalTime time = convertTime(timeStep);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    log("Klient zajął kase, id: " + customer.getId() + " kasa nr: " + idCashRegister + " czas: " + waitingQueueAmbassador.federateTime);
+  }
+
+  private void registerObject() throws RTIexception {
+    int classHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    this.waitingQueueHLAObject = rtiamb.registerObjectInstance(classHandle);
+  }
+
+  private void updateHLAObject(double time) throws RTIexception {
+    SuppliedAttributes attributes =
+        RtiFactoryFactory.getRtiFactory().createSuppliedAttributes();
+
+    int classHandle = rtiamb.getObjectClass(waitingQueueHLAObject);
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", classHandle);
+    byte[] numberOfQueuesValue = EncodingHelpers.encodeInt(numberOfQueues);
+
+    attributes.add(numberOfQueuesHandle, numberOfQueuesValue);
+    LogicalTime logicalTime = convertTime(time);
+    rtiamb.updateAttributeValues(waitingQueueHLAObject, attributes, "actualize number of queues".getBytes(), logicalTime);
+  }
+
+
   private void addToShortesQueue(Customer customer) throws Exception {
+    if (waitingQueueList.stream().filter(WaitingQueue::isFull).count() == numberOfQueues) {
+      createWaitingQueue();
+    }
     WaitingQueue shortestQueue = waitingQueueList.stream()
         .min(Comparator.comparingInt(WaitingQueue::getSize))
         .orElseThrow(() -> new Exception("Brak kolejek!!!"));
@@ -98,11 +158,10 @@ public class WaitingQueueFederate {
     log("Klient id: " + customer.getId() + " dodany do kolejki nr: " + shortestQueue.getId());
   }
 
-  private void createWaitingQueue(int numberOfQueues) {
-    waitingQueueList = new ArrayList<>(numberOfQueues);
-    for (int i = 0; i < numberOfQueues; i++) {
-      waitingQueueList.add(new WaitingQueue(i));
-    }
+  private void createWaitingQueue() {
+    numberOfQueues++;
+    waitingQueueList.add(new WaitingQueue(numberOfQueues, maxQueueSize));
+    System.out.println("Nowa kolejka");
   }
 
   private void waitForUser() {
@@ -134,6 +193,15 @@ public class WaitingQueueFederate {
   }
 
   private void publishAndSubscribe() throws RTIexception {
+    int classHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", classHandle);
+
+    AttributeHandleSet attributes =
+        RtiFactoryFactory.getRtiFactory().createAttributeHandleSet();
+    attributes.add(numberOfQueuesHandle);
+
+    rtiamb.publishObjectClass(classHandle, attributes);
+
     int customerStopShoppingHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStopShopping");
     waitingQueueAmbassador.customerStopShoppingHandle = customerStopShoppingHandle;
     rtiamb.subscribeInteractionClass(customerStopShoppingHandle);

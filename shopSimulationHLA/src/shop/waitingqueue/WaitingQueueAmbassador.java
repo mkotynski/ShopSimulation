@@ -27,6 +27,7 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
   protected boolean running = true;
 
   protected int customerStopShoppingHandle = 0;
+  protected int freeCashRegisterHandle = 1;
 
   protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
 
@@ -73,7 +74,7 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
   }
 
   public void timeAdvanceGrant(LogicalTime theTime) {
-    this.federateTime = convertTime(theTime);
+    this.grantedTime = convertTime(theTime);
     this.isAdvancing = false;
   }
 
@@ -100,6 +101,14 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
 
         double time = convertTime(theTime);
         externalEvents.add(new ExternalEvent(new Customer(id, privilege, shoppingTime), ExternalEvent.EventType.ADD, time));
+      } catch (ArrayIndexOutOfBounds ignored) {
+      }
+    } else if (interactionClass == freeCashRegisterHandle) {
+      try {
+        int id = EncodingHelpers.decodeInt(theInteraction.getValue(0));
+        double time = convertTime(theTime);
+        externalEvents.add(new ExternalEvent(id, ExternalEvent.EventType.FREE, time));
+        log("Dodano nowego klienta, id: " + id);
       } catch (ArrayIndexOutOfBounds ignored) {
       }
     }

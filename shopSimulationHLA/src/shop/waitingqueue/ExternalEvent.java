@@ -6,11 +6,12 @@ import java.util.Comparator;
 
 public class ExternalEvent {
 
-  public enum EventType {ADD}
+  public enum EventType {ADD, FREE}
 
   private Customer customer;
   private EventType eventType;
   private Double time;
+  private int idCashRegister;
 
   public ExternalEvent(Customer customer, EventType eventType, Double time) {
     this.customer = customer;
@@ -18,8 +19,22 @@ public class ExternalEvent {
     this.time = time;
   }
 
+  public ExternalEvent(int idCashRegister, EventType eventType, Double time) {
+    this.idCashRegister = idCashRegister;
+    this.eventType = eventType;
+    this.time = time;
+  }
+
   public EventType getEventType() {
     return eventType;
+  }
+
+  public int getIdCashRegister() {
+    return idCashRegister;
+  }
+
+  public void setIdCashRegister(int idCashRegister) {
+    this.idCashRegister = idCashRegister;
   }
 
   public Customer getCustomer() {
