@@ -1,12 +1,15 @@
 package shop.cashregister;
 
+import shop.models.Customer;
+
 import java.util.Comparator;
 
 public class ExternalEvent {
 
-  public enum EventType {ADD}
+  public enum EventType {ADD, START_SERVICE}
 
   private int numberOfQueues;
+  private Customer customer;
   private EventType eventType;
   private Double time;
 
@@ -14,6 +17,16 @@ public class ExternalEvent {
     this.numberOfQueues = numberOfQueues;
     this.eventType = eventType;
     this.time = time;
+  }
+
+  public ExternalEvent(Customer customer, EventType eventType, Double time) {
+    this.customer = customer;
+    this.eventType = eventType;
+    this.time = time;
+  }
+
+  public Customer getCustomer() {
+    return customer;
   }
 
   public EventType getEventType() {

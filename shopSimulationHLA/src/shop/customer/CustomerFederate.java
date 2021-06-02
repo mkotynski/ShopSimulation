@@ -114,7 +114,7 @@ public class CustomerFederate {
 
   private double randomTime() {
     Random r = new Random();
-    return 10 + (9 * r.nextDouble());
+    return (10 + (9 * r.nextDouble()));
   }
 
   private LogicalTime convertTime(double time) {

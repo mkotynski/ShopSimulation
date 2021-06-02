@@ -6,6 +6,7 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.NullFederateAmbassador;
 import org.portico.impl.hla13.types.DoubleTime;
 import shop.cashregister.ExternalEvent;
+import shop.models.Customer;
 
 import java.util.ArrayList;
 
@@ -26,6 +27,8 @@ public class CashRegisterAmbassador extends NullFederateAmbassador {
   protected int waitingQueueHandle;
 
   protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
+
+  protected int startCustomerServiceHandle = 0;
 
   int numberOfQueues = 0;
 
@@ -103,6 +106,32 @@ public class CashRegisterAmbassador extends NullFederateAmbassador {
   public void discoverObjectInstance(int theObject, int theObjectClass, String objectName) throws CouldNotDiscover, ObjectClassNotKnown, FederateInternalError {
     System.out.println("Pojawil sie nowy obiekt typu WaitingQueue");
     waitingQueueHandle = theObject;
+  }
+
+  public void receiveInteraction(int interactionClass,
+                                 ReceivedInteraction theInteraction,
+                                 byte[] tag) {
+    // just pass it on to the other method for printing purposes
+    // passing null as the time will let the other method know it
+    // it from us, not from the RTI
+    receiveInteraction(interactionClass, theInteraction, tag, null, null);
+  }
+
+  public void receiveInteraction(int interactionClass,
+                                 ReceivedInteraction theInteraction,
+                                 byte[] tag,
+                                 LogicalTime theTime,
+                                 EventRetractionHandle eventRetractionHandle) {
+    if (interactionClass == startCustomerServiceHandle) {
+      try {
+        int customerId = EncodingHelpers.decodeInt(theInteraction.getValue(0));
+        double shoppingTime = EncodingHelpers.decodeDouble(theInteraction.getValue(1));
+        int cashRegisterId = EncodingHelpers.decodeInt(theInteraction.getValue(2));
+        double time = convertTime(theTime);
+        externalEvents.add(new ExternalEvent(new Customer(customerId, shoppingTime, cashRegisterId), ExternalEvent.EventType.START_SERVICE, time));
+      } catch (ArrayIndexOutOfBounds ignored) {
+      }
+    }
   }
 
 }
