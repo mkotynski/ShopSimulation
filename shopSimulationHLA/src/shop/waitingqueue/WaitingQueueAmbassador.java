@@ -92,7 +92,6 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
                                  byte[] tag,
                                  LogicalTime theTime,
                                  EventRetractionHandle eventRetractionHandle) {
-    StringBuilder builder = new StringBuilder("Interaction Received:");
     if (interactionClass == customerStopShoppingHandle) {
       try {
         int id = EncodingHelpers.decodeInt(theInteraction.getValue(0));
@@ -103,12 +102,12 @@ public class WaitingQueueAmbassador extends NullFederateAmbassador {
         externalEvents.add(new ExternalEvent(new Customer(id, privilege, shoppingTime), ExternalEvent.EventType.ADD, time));
       } catch (ArrayIndexOutOfBounds ignored) {
       }
-    } else if (interactionClass == freeCashRegisterHandle) {
+    } else {
       try {
         int id = EncodingHelpers.decodeInt(theInteraction.getValue(0));
         double time = convertTime(theTime);
         externalEvents.add(new ExternalEvent(id, ExternalEvent.EventType.FREE, time));
-        log("Dodano nowego klienta, id: " + id);
+        log("Kasa nr: " + id + " jest wolna");
       } catch (ArrayIndexOutOfBounds ignored) {
       }
     }

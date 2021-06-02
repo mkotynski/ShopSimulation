@@ -73,15 +73,7 @@ public class WaitingQueueFederate {
 
     while (waitingQueueAmbassador.running) {
       double timeToAdvance = waitingQueueAmbassador.federateTime + timeStep;
-      advanceTime(timeStep);
-
-      for(int i=0; i < freeCashRegisterIds.size(); i++) {
-        //TODO warunek nie przechodzi
-          if (waitingQueueList.get(freeCashRegisterIds.get(i)).isNotEmpty()) {
-            startCustomerService(waitingQueueList.get(freeCashRegisterIds.get(i)).getFirstCustomer(), freeCashRegisterIds.get(i), timeStep);
-            freeCashRegisterIds.remove(freeCashRegisterIds.get(i));
-          }
-      }
+      advanceTime(timeToAdvance);
 
       if (!waitingQueueAmbassador.externalEvents.isEmpty()) {
         waitingQueueAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
@@ -91,6 +83,8 @@ public class WaitingQueueFederate {
             this.addToShortesQueue(externalEvent.getCustomer());
           }
           if (externalEvent.getEventType() == ExternalEvent.EventType.FREE) {
+            log("war " + !freeCashRegisterIds.contains(externalEvent.getIdCashRegister()));
+            freeCashRegisterIds.forEach(e -> System.out.print(e + ", "));
             if (!freeCashRegisterIds.contains(externalEvent.getIdCashRegister())) {
               freeCashRegisterIds.add(externalEvent.getIdCashRegister());
             }
@@ -98,6 +92,14 @@ public class WaitingQueueFederate {
         }
         waitingQueueAmbassador.externalEvents.clear();
       }
+
+      for(int i=0; i < freeCashRegisterIds.size(); i++) {
+        if (waitingQueueList.get(freeCashRegisterIds.get(i)-1).isNotEmpty()) {
+          startCustomerService(waitingQueueList.get(freeCashRegisterIds.get(i)-1).getFirstCustomer(), freeCashRegisterIds.get(i), timeToAdvance);
+          freeCashRegisterIds.remove(freeCashRegisterIds.get(i));
+        }
+      }
+
       if (waitingQueueAmbassador.grantedTime == timeToAdvance) {
         timeToAdvance += waitingQueueAmbassador.federateLookahead;
         updateHLAObject(timeToAdvance);
@@ -107,7 +109,7 @@ public class WaitingQueueFederate {
     }
   }
 
-  private void startCustomerService(Customer customer, int idCashRegister, double timeStep) throws RTIinternalError, NameNotFound, FederateNotExecutionMember, InteractionClassNotDefined, RestoreInProgress, InteractionClassNotPublished, SaveInProgress, InvalidFederationTime, ConcurrentAccessAttempted, InteractionParameterNotDefined {
+  private void startCustomerService(Customer customer, int idCashRegister, double time) throws RTIinternalError, NameNotFound, FederateNotExecutionMember, InteractionClassNotDefined, RestoreInProgress, InteractionClassNotPublished, SaveInProgress, InvalidFederationTime, ConcurrentAccessAttempted, InteractionParameterNotDefined {
     SuppliedParameters parameters =
         RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
     byte[] customerId = EncodingHelpers.encodeInt(customer.getId());
@@ -123,9 +125,9 @@ public class WaitingQueueFederate {
     parameters.add(shoppingTimeHandle, shoppingTime);
     parameters.add(queueIdHandle, queueId);
 
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
-    log("Klient zajął kase, id: " + customer.getId() + " kasa nr: " + idCashRegister + " czas: " + waitingQueueAmbassador.federateTime);
+    LogicalTime logicalTime = convertTime(time + waitingQueueAmbassador.federateLookahead);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), logicalTime);
+    log("Klient zajął kase, id: " + customer.getId() + " kasa nr: " + idCashRegister);
   }
 
   private void registerObject() throws RTIexception {
@@ -205,12 +207,19 @@ public class WaitingQueueFederate {
     int customerStopShoppingHandle = rtiamb.getInteractionClassHandle("InteractionRoot.CustomerStopShopping");
     waitingQueueAmbassador.customerStopShoppingHandle = customerStopShoppingHandle;
     rtiamb.subscribeInteractionClass(customerStopShoppingHandle);
+
+    int freeCashRegisterHandle = rtiamb.getInteractionClassHandle("InteractionRoot.FreeCashRegister");
+    waitingQueueAmbassador.freeCashRegisterHandle = freeCashRegisterHandle;
+    rtiamb.subscribeInteractionClass(freeCashRegisterHandle);
+
+    int startCustomerServiceHandle = rtiamb.getInteractionClassHandle("InteractionRoot.StartCustomerService");
+    rtiamb.publishInteractionClass(startCustomerServiceHandle);
   }
 
-  private void advanceTime(double timestep) throws RTIexception {
+  private void advanceTime(double timeToAdvance) throws RTIexception {
     // request the advance
     waitingQueueAmbassador.isAdvancing = true;
-    LogicalTime newTime = convertTime(waitingQueueAmbassador.federateTime + timestep);
+    LogicalTime newTime = convertTime(timeToAdvance);
     rtiamb.timeAdvanceRequest(newTime);
     while (waitingQueueAmbassador.isAdvancing) {
       rtiamb.tick();

@@ -5,6 +5,7 @@ public class Customer {
   private boolean privilege;
   private double shoppingTime;
   private double shoppingEndTime;
+  private int cashRegisterId;
 
   public Customer(int id, boolean privilage, double shoppingTime) {
     this.id = id;
@@ -12,8 +13,18 @@ public class Customer {
     this.shoppingTime = shoppingTime;
   }
 
+  public Customer(int id, double shoppingTime, int cashRegisterId) {
+    this.id = id;
+    this.shoppingTime = shoppingTime;
+    this.cashRegisterId = cashRegisterId;
+  }
+
   public int getId() {
     return id;
+  }
+
+  public int getCashRegisterId() {
+    return cashRegisterId;
   }
 
   public boolean isPrivilege() {

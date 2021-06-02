@@ -15,8 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-//TODO odebrac interakcje z id uzytkownika itd
-//TODO rozpoczac obsluge klienta i usunac go ze sklepu
 public class CashRegisterFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
@@ -66,28 +64,37 @@ public class CashRegisterFederate {
 
     while (cashRegisterAmbassador.running) {
       double timeToAdvance = cashRegisterAmbassador.federateTime + cashRegisterAmbassador.federateLookahead;
-      advanceTime(cashRegisterAmbassador.federateLookahead);
-
-      for (int i = 0; i < cashRegisterList.size(); i++) {
-        if (cashRegisterList.get(i).isFree()) {
-          try {
-            freeCashRegister(cashRegisterList.get(i).getId(), timeToAdvance + 1.0);
-          } catch (Exception exception) {
-            exception.printStackTrace();
-          }
-        }
-      }
+      advanceTime(timeToAdvance);
 
       if (!cashRegisterAmbassador.externalEvents.isEmpty()) {
         cashRegisterAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
         for (ExternalEvent externalEvent : cashRegisterAmbassador.externalEvents) {
           cashRegisterAmbassador.federateTime = externalEvent.getTime();
           if (externalEvent.getEventType() == ExternalEvent.EventType.ADD) {
-            createNewCashRegister();
+            createNewCashRegister(timeToAdvance);
+          }
+          if (externalEvent.getEventType() == ExternalEvent.EventType.START_SERVICE) {
+            log("Rozpoczeto obsluge klienta, id: " + externalEvent.getCustomer().getId() + " w kasie nr: " +
+                externalEvent.getCustomer().getCashRegisterId() + " czas obslugi: " + externalEvent.getCustomer().getShoppingTime());
+
+            cashRegisterList.get(externalEvent.getCustomer().getCashRegisterId()-1).setBusy(true);
+            cashRegisterList.get(externalEvent.getCustomer().getCashRegisterId()-1)
+                .setEndServiceTime(cashRegisterAmbassador.federateTime + (externalEvent.getCustomer().getShoppingTime()));
+
+            log("Rozpoczeto obsluge w kasie nr: " + (externalEvent.getCustomer().getCashRegisterId()) + " czas: " + cashRegisterAmbassador.federateTime);
           }
         }
         cashRegisterAmbassador.externalEvents.clear();
       }
+
+      for(int i=0; i < cashRegisterList.size() ; i++) {
+        if(cashRegisterList.get(i).getEndServiceTime() <= cashRegisterAmbassador.federateTime && cashRegisterList.get(i).isBusy()) {
+          cashRegisterList.get(i).setBusy(false);
+          log("Koniec obslugi w kasie nr: " + cashRegisterList.get(i).getId() + " czas: " + cashRegisterList.get(i).getEndServiceTime());
+          freeCashRegister(cashRegisterList.get(i).getId(), timeToAdvance);
+        }
+      }
+
       if (cashRegisterAmbassador.grantedTime == timeToAdvance) {
         timeToAdvance += cashRegisterAmbassador.federateLookahead;
         cashRegisterAmbassador.federateTime = timeToAdvance;
@@ -96,12 +103,13 @@ public class CashRegisterFederate {
     }
   }
 
-  private void createNewCashRegister() {
+  private void createNewCashRegister(double timeToAdvance) throws RTIexception {
     cashRegisterList.add(new CashRegister(cashRegisterList.size() + 1));
     log("Otworzono nowa kase nr: " + cashRegisterList.size());
+    freeCashRegister(cashRegisterList.get(cashRegisterList.size() - 1).getId(), timeToAdvance);
   }
 
-  private void freeCashRegister(int id, double timeStep) throws RTIexception {
+  private void freeCashRegister(int id, double timeToAdvance) throws RTIexception {
     SuppliedParameters parameters =
         RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
     byte[] idVar = EncodingHelpers.encodeInt(id);
@@ -110,9 +118,9 @@ public class CashRegisterFederate {
 
     parameters.add(idHandle, idVar);
 
-    LogicalTime time = convertTime(timeStep);
+    LogicalTime time = convertTime(timeToAdvance + cashRegisterAmbassador.federateLookahead);
     rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
-    log("Kasa, id: " + id + " jest wolna, czas: " + cashRegisterAmbassador.federateTime);
+    log("Kasa, id: " + id + " jest wolna");
   }
 
   private void waitForUser() {
@@ -155,12 +163,16 @@ public class CashRegisterFederate {
 
     int freeCashRegisterHandle = rtiamb.getInteractionClassHandle("InteractionRoot.FreeCashRegister");
     rtiamb.publishInteractionClass(freeCashRegisterHandle);
+
+    int startCustomerServiceHandle = rtiamb.getInteractionClassHandle("InteractionRoot.StartCustomerService");
+    cashRegisterAmbassador.startCustomerServiceHandle = startCustomerServiceHandle;
+    rtiamb.subscribeInteractionClass(startCustomerServiceHandle);
   }
 
-  private void advanceTime(double timestep) throws RTIexception {
+  private void advanceTime(double timeToAdvance) throws RTIexception {
     // request the advance
     cashRegisterAmbassador.isAdvancing = true;
-    LogicalTime newTime = convertTime(cashRegisterAmbassador.federateTime + timestep);
+    LogicalTime newTime = convertTime(timeToAdvance);
     rtiamb.timeAdvanceRequest(newTime);
     while (cashRegisterAmbassador.isAdvancing) {
       rtiamb.tick();
