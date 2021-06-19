@@ -8,7 +8,6 @@ import javafx.scene.Scene;
 import javafx.scene.chart.*;
 import javafx.scene.layout.GridPane;
 import javafx.stage.Stage;
-import org.apache.log4j.Category;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
 
@@ -16,7 +15,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
@@ -33,12 +31,12 @@ public class GuiFederate extends Application {
   CategoryAxis xAxisQueueSize = new CategoryAxis();
   NumberAxis yAxisQueueSize = new NumberAxis();
 
-  LineChart<Number, Number> numberOfQueuesChart = new LineChart<Number, Number>(xAxisTime, yAxisTime);
+  LineChart<Number, Number> numberOfQueuesChart = new LineChart<>(xAxisTime, yAxisTime);
 
-  BarChart<String, Number> queuesSizesBarChart = new BarChart<String, Number>(xAxisQueueSize, yAxisQueueSize);
+  BarChart<String, Number> queuesSizesBarChart = new BarChart<>(xAxisQueueSize, yAxisQueueSize);
 
   LineChart.Series<Number, Number> numberOfQueuesSeries = new LineChart.Series<>();
-  List<BarChart.Series<String, Number>> queuesSizeSeries = new ArrayList<>();
+  BarChart.Series<String, Number> queuesSizeSeries = new XYChart.Series<>();
   private int numberOfQueue = 0;
 
 
@@ -92,16 +90,8 @@ public class GuiFederate extends Application {
         guiAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
         for (ExternalEvent externalEvent : guiAmbassador.externalEvents) {
           guiAmbassador.federateTime = externalEvent.getTime();
-          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_NUMBER_OF_QUEUE) {
-//            numberOfQueue = externalEvent.getNumberOfQueues();
-            //updateGUI(numberOfQueue, queuesSizesList, guiAmbassador.federateTime);
-          }
           if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_QUEUES_SIZES) {
-            if (lastNumberOfQueues < externalEvent.queuesSizes.size()) {
-              queuesSizeSeries.add(new XYChart.Series<>());
-            }
             updateGUI(externalEvent.getQueuesSizes().size(), externalEvent.getQueuesSizes(), guiAmbassador.federateTime, 0);
-            queuesSizesBarChart.getData().addAll(queuesSizeSeries);
           }
         }
         guiAmbassador.externalEvents.clear();
@@ -124,6 +114,7 @@ public class GuiFederate extends Application {
 
     numberOfQueuesChart.setTitle(numberOfQueuesTitle);
     queuesSizesBarChart.setTitle(queuesSizesTitle);
+    queuesSizesBarChart.setAnimated(false);
 
     Platform.setImplicitExit(false);
 
@@ -140,12 +131,8 @@ public class GuiFederate extends Application {
       stage.show();
     });
 
-    for (int i = 0; i < queuesSizeSeries.size(); i++) {
-      queuesSizeSeries.add(new XYChart.Series<>());
-    }
-
     numberOfQueuesChart.getData().add(numberOfQueuesSeries);
-    queuesSizesBarChart.getData().addAll(queuesSizeSeries);
+    queuesSizesBarChart.getData().add(queuesSizeSeries);
   }
 
   public void updateGUI(int queuesNumber, List<Integer> queuesSizes, double time, int i) {
@@ -160,10 +147,9 @@ public class GuiFederate extends Application {
         numberOfQueue = queuesNumber;
       }
 
-      int i = 0;
-      for (XYChart.Series s : queuesSizeSeries) {
-        s.getData().add(new XYChart.Data<>("Kolejka " + (i + 1), queuesSizes.get(i-1)));
-        i++;
+      queuesSizeSeries.getData().clear();
+      for (int i = 0; i < queuesSizes.size(); i++) {
+        queuesSizeSeries.getData().add(new XYChart.Data<>("Kolejka " + (i + 1), queuesSizes.get(i)));
       }
     });
   }
