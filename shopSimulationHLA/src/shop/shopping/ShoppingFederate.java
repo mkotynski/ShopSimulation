@@ -5,6 +5,7 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.Properties;
 import shop.models.Customer;
 
 import java.io.BufferedReader;
@@ -21,8 +22,6 @@ public class ShoppingFederate {
   private RTIambassador rtiamb;
   private ShoppingAmbassador shoppingAmbassador;
   private List<Customer> customersList = new ArrayList<>();
-  private int maxNumberOfProducts = 50;
-  private  int minNumberOfProducts = 5;
 
   public void runFederate() throws RTIexception {
 
@@ -189,20 +188,21 @@ public class ShoppingFederate {
   }
 
   private void customerStartShopping(int id) {
-    Customer customer = new Customer(id, randomPrivilege(), randomShoppingTime());
+    double shoppingTime = randomShoppingTime();
+    Customer customer = new Customer(id, randomPrivilege(), shoppingTime);
     customer.setShoppingEndTime(customer.getShoppingTime() + shoppingAmbassador.federateTime);
     customersList.add(customer);
-    log("Klient rozpoczyna zakupy: id " + customer.getId() + (customer.isPrivilege() ? " uprzywilejowany":"") + " czas zakupow: " + randomShoppingTime());
+    log("Klient rozpoczyna zakupy: id " + customer.getId() + (customer.isPrivilege() ? " uprzywilejowany":"") + " czas zakupow: " + shoppingTime);
   }
 
   private boolean randomPrivilege() {
     Random random = new Random();
-    int randomInt = random.nextInt(10);
-    return randomInt == 3;
+    int randomInt = random.nextInt(100);
+    return randomInt < Properties.PRIVILEGE_CUSTOMER_PERCENT;
   }
 
   private double randomShoppingTime() {
     Random random = new Random();
-    return random.nextInt(maxNumberOfProducts) + minNumberOfProducts;
+    return Properties.SHOPPING_TIME_CONSTANT * (random.nextInt(Properties.MAX_NUMBER_OF_PRODUCTS) + Properties.MIN_NUMBER_OF_PRODUCTS);
   }
 }

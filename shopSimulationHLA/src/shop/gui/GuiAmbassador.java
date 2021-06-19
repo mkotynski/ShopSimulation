@@ -6,7 +6,14 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.NullFederateAmbassador;
 import org.portico.impl.hla13.types.DoubleTime;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.util.ArrayList;
+import java.util.List;
+
 public class GuiAmbassador extends NullFederateAmbassador {
+  protected double grantedTime = 0.0;
   protected double federateTime = 0.0;
   protected double federateLookahead = 1.0;
 
@@ -18,6 +25,14 @@ public class GuiAmbassador extends NullFederateAmbassador {
   protected boolean isReadyToRun = false;
 
   protected boolean running = true;
+
+  protected int waitingQueueHandle;
+
+  protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
+
+  int numberOfQueues = 0;
+
+  private List<Integer> queuesSizesList = new ArrayList<>();
 
   public GuiAmbassador() {
   }
@@ -66,112 +81,55 @@ public class GuiAmbassador extends NullFederateAmbassador {
     this.isAdvancing = false;
   }
 
-  public void discoverObjectInstance(int theObject,
-                                     int theObjectClass,
-                                     String objectName) {
-    log("Discoverd Object: handle=" + theObject + ", classHandle=" +
-        theObjectClass + ", name=" + objectName);
-  }
-
   public void reflectAttributeValues(int theObject,
-                                     ReflectedAttributes theAttributes,
-                                     byte[] tag) {
+                                     ReflectedAttributes theAttributes, byte[] tag) {
     reflectAttributeValues(theObject, theAttributes, tag, null, null);
   }
 
-  public void reflectAttributeValues(int theObject,
-                                     ReflectedAttributes theAttributes,
-                                     byte[] tag,
-                                     LogicalTime theTime,
-                                     EventRetractionHandle retractionHandle) {
-    StringBuilder builder = new StringBuilder("Reflection for object:");
+  @SuppressWarnings("unchecked")
+  public void reflectAttributeValues( int theObject,
+                                      ReflectedAttributes theAttributes,
+                                      byte[] tag,
+                                      LogicalTime theTime,
+                                      EventRetractionHandle retractionHandle ) {
 
-    // print the handle
-    builder.append(" handle=" + theObject);
-    // print the tag
-    builder.append(", tag=" + EncodingHelpers.decodeString(tag));
-    // print the time (if we have it) we'll get null if we are just receiving
-    // a forwarded call from the other reflect callback above
-    if (theTime != null) {
-      builder.append(", time=" + convertTime(theTime));
-    }
+    try {
+      double time = convertTime(theTime);
+      List<Integer> queuesSizes;
+      int newNumberOfQueue = EncodingHelpers.decodeInt(theAttributes.getValue(0));
+      byte[] queuesSizesValue = theAttributes.getValue(1);
 
-    // print the attribute information
-    builder.append(", attributeCount=" + theAttributes.size());
-    builder.append("\n");
-    for (int i = 0; i < theAttributes.size(); i++) {
-      try {
-        // print the attibute handle
-        builder.append("\tattributeHandle=");
-        builder.append(theAttributes.getAttributeHandle(i));
-        // print the attribute value
-        builder.append(", attributeValue=");
-        builder.append(
-            EncodingHelpers.decodeString(theAttributes.getValue(i)));
-        builder.append("\n");
-      } catch (ArrayIndexOutOfBounds aioob) {
-        // won't happen
+      ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(queuesSizesValue));
+      try{
+        queuesSizes = (List<Integer>) ois.readObject();
+      } finally {
+        ois.close();
       }
-    }
 
-    log(builder.toString());
-  }
-
-  public void receiveInteraction(int interactionClass,
-                                 ReceivedInteraction theInteraction,
-                                 byte[] tag) {
-    // just pass it on to the other method for printing purposes
-    // passing null as the time will let the other method know it
-    // it from us, not from the RTI
-    receiveInteraction(interactionClass, theInteraction, tag, null, null);
-  }
-
-  public void receiveInteraction(int interactionClass,
-                                 ReceivedInteraction theInteraction,
-                                 byte[] tag,
-                                 LogicalTime theTime,
-                                 EventRetractionHandle eventRetractionHandle) {
-    StringBuilder builder = new StringBuilder("Interaction Received:");
-
-    // print the handle
-    builder.append(" handle=" + interactionClass);
-    // print the tag
-    builder.append(", tag=" + EncodingHelpers.decodeString(tag));
-    // print the time (if we have it) we'll get null if we are just receiving
-    // a forwarded call from the other reflect callback above
-    if (theTime != null) {
-      builder.append(", time=" + convertTime(theTime));
-    }
-
-    // print the parameer information
-    builder.append(", parameterCount=" + theInteraction.size());
-    builder.append("\n");
-    for (int i = 0; i < theInteraction.size(); i++) {
-      try {
-        // print the parameter handle
-        builder.append("\tparamHandle=");
-        builder.append(theInteraction.getParameterHandle(i));
-        // print the parameter value
-        builder.append(", paramValue=");
-        builder.append(
-            EncodingHelpers.decodeString(theInteraction.getValue(i)));
-        builder.append("\n");
-      } catch (ArrayIndexOutOfBounds aioob) {
-        // won't happen
+      if(queuesSizesList.size() == queuesSizes.size()) {
+        for(int i=0 ; i < queuesSizesList.size(); i++) {
+          if(!queuesSizesList.get(i).equals(queuesSizes.get(i))) {
+            queuesSizesList = queuesSizes;
+            externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_QUEUES_SIZES, time));
+            break;
+          }
+        }
+      } else {
+        externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_QUEUES_SIZES, time));
       }
+
+      if (numberOfQueues < newNumberOfQueue) {
+        externalEvents.add(new ExternalEvent(newNumberOfQueue, ExternalEvent.EventType.UPDATE_NUMBER_OF_QUEUE, time));
+        numberOfQueues++;
+      }
+    } catch (ArrayIndexOutOfBounds | IOException | ClassNotFoundException arrayIndexOutOfBounds) {
+      arrayIndexOutOfBounds.printStackTrace();
     }
-
-    log(builder.toString());
   }
 
-  public void removeObjectInstance(int theObject, byte[] userSuppliedTag) {
-    log("Object Removed: handle=" + theObject);
-  }
-
-  public void removeObjectInstance(int theObject,
-                                   byte[] userSuppliedTag,
-                                   LogicalTime theTime,
-                                   EventRetractionHandle retractionHandle) {
-    log("Object Removed: handle=" + theObject);
+  @Override
+  public void discoverObjectInstance(int theObject, int theObjectClass, String objectName) {
+    System.out.println("Pojawil sie nowy obiekt typu WaitingQueue");
+    waitingQueueHandle = theObject;
   }
 }

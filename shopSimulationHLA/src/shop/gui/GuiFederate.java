@@ -1,8 +1,14 @@
 package shop.gui;
 
 import hla.rti.*;
-import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.scene.Scene;
+import javafx.scene.chart.*;
+import javafx.scene.layout.GridPane;
+import javafx.stage.Stage;
+import org.apache.log4j.Category;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
 
@@ -10,16 +16,31 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
-public class GuiFederate {
+public class GuiFederate extends Application {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private GuiAmbassador fedamb;
-  private final double timeStep = 10.0;
-  private int stock = 10;
-  private int storageHlaHandle;
+  private GuiAmbassador guiAmbassador;
+  private final double timeStep = 1.0;
+  private int lastNumberOfQueues = 0;
+
+  NumberAxis xAxisTime = new NumberAxis();
+  NumberAxis yAxisTime = new NumberAxis();
+  CategoryAxis xAxisQueueSize = new CategoryAxis();
+  NumberAxis yAxisQueueSize = new NumberAxis();
+
+  LineChart<Number, Number> numberOfQueuesChart = new LineChart<Number, Number>(xAxisTime, yAxisTime);
+
+  BarChart<String, Number> queuesSizesBarChart = new BarChart<String, Number>(xAxisQueueSize, yAxisQueueSize);
+
+  LineChart.Series<Number, Number> numberOfQueuesSeries = new LineChart.Series<>();
+  List<BarChart.Series<String, Number>> queuesSizeSeries = new ArrayList<>();
+  private int numberOfQueue = 0;
+
 
   public void runFederate() throws RTIexception {
 
@@ -37,13 +58,13 @@ public class GuiFederate {
       return;
     }
 
-    fedamb = new GuiAmbassador();
-    rtiamb.joinFederationExecution("GuiFederate", "CustomerFederate", fedamb);
-    log("Joined Federation as CustomerFederate");
+    guiAmbassador = new GuiAmbassador();
+    rtiamb.joinFederationExecution("GuiFederate", "Shop-Federation", guiAmbassador);
+    log("Joined Federation as GuiFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (guiAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -51,7 +72,7 @@ public class GuiFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (guiAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
@@ -61,11 +82,90 @@ public class GuiFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    while (fedamb.running) {
-      advanceTime(randomTime());
-      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+    createGui();
+
+    while (guiAmbassador.running) {
+      double timeToAdvance = guiAmbassador.federateTime + timeStep;
+      advanceTime(timeToAdvance);
+
+      if (!guiAmbassador.externalEvents.isEmpty()) {
+        guiAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
+        for (ExternalEvent externalEvent : guiAmbassador.externalEvents) {
+          guiAmbassador.federateTime = externalEvent.getTime();
+          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_NUMBER_OF_QUEUE) {
+//            numberOfQueue = externalEvent.getNumberOfQueues();
+            //updateGUI(numberOfQueue, queuesSizesList, guiAmbassador.federateTime);
+          }
+          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_QUEUES_SIZES) {
+            if (lastNumberOfQueues < externalEvent.queuesSizes.size()) {
+              queuesSizeSeries.add(new XYChart.Series<>());
+            }
+            updateGUI(externalEvent.getQueuesSizes().size(), externalEvent.getQueuesSizes(), guiAmbassador.federateTime, 0);
+            queuesSizesBarChart.getData().addAll(queuesSizeSeries);
+          }
+        }
+        guiAmbassador.externalEvents.clear();
+      }
+
+
+      if (guiAmbassador.grantedTime == timeToAdvance) {
+        timeToAdvance += guiAmbassador.federateLookahead;
+        //TODO SREDNI CZAS OCZEKIWANIA
+//        updateHLAObject(timeToAdvance);
+        guiAmbassador.federateTime = timeToAdvance;
+      }
       rtiamb.tick();
     }
+  }
+
+  private void createGui() {
+    String numberOfQueuesTitle = new String("Ilosc kolejek");
+    String queuesSizesTitle = new String("Dlugosci kolejek");
+
+    numberOfQueuesChart.setTitle(numberOfQueuesTitle);
+    queuesSizesBarChart.setTitle(queuesSizesTitle);
+
+    Platform.setImplicitExit(false);
+
+    Platform.runLater(() -> {
+      Stage stage = new Stage();
+      stage.setTitle("Shop");
+      GridPane layout = new GridPane();
+
+      layout.add(numberOfQueuesChart, 1, 1);
+      layout.add(queuesSizesBarChart, 1, 2);
+
+      Scene scene = new Scene(layout);
+      stage.setScene(scene);
+      stage.show();
+    });
+
+    for (int i = 0; i < queuesSizeSeries.size(); i++) {
+      queuesSizeSeries.add(new XYChart.Series<>());
+    }
+
+    numberOfQueuesChart.getData().add(numberOfQueuesSeries);
+    queuesSizesBarChart.getData().addAll(queuesSizeSeries);
+  }
+
+  public void updateGUI(int queuesNumber, List<Integer> queuesSizes, double time, int i) {
+    //log("aaa" + String.valueOf(queueSize)+" "+String.valueOf(avgWaitingTime));
+    runThread(queuesNumber, queuesSizes);
+  }
+
+  private void runThread(int queuesNumber, List<Integer> queuesSizes) {
+    Platform.runLater(() -> {
+      if (numberOfQueue != queuesNumber) {
+        numberOfQueuesSeries.getData().add(new LineChart.Data(guiAmbassador.federateTime, queuesNumber));
+        numberOfQueue = queuesNumber;
+      }
+
+      int i = 0;
+      for (XYChart.Series s : queuesSizeSeries) {
+        s.getData().add(new XYChart.Data<>("Kolejka " + (i + 1), queuesSizes.get(i-1)));
+        i++;
+      }
+    });
   }
 
   private void waitForUser() {
@@ -80,52 +180,45 @@ public class GuiFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(guiAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(guiAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (guiAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (guiAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    rtiamb.publishInteractionClass(addProductHandle);
+    int simObjectClassHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", simObjectClassHandle);
+    int queuesSizesHandle = rtiamb.getAttributeHandle("queuesSizes", simObjectClassHandle);
+
+    AttributeHandleSet attributes = RtiFactoryFactory.getRtiFactory()
+        .createAttributeHandleSet();
+    attributes.add(numberOfQueuesHandle);
+    attributes.add(queuesSizesHandle);
+
+    rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
   }
 
-  private void sendInteraction(double timeStep) throws RTIexception {
-    SuppliedParameters parameters =
-        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-    Random random = new Random();
-    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
-
-    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-
-    parameters.add(quantityHandle, quantity);
-
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
-  }
-
-  private void advanceTime(double timestep) throws RTIexception {
-    log("requesting time advance for: " + timestep);
+  private void advanceTime(double timeToAdvance) throws RTIexception {
     // request the advance
-    fedamb.isAdvancing = true;
-    LogicalTime newTime = convertTime(fedamb.federateTime + timestep);
+    guiAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(timeToAdvance);
     rtiamb.timeAdvanceRequest(newTime);
-    while (fedamb.isAdvancing) {
+    while (guiAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }
+
 
   private double randomTime() {
     Random r = new Random();
@@ -152,5 +245,14 @@ public class GuiFederate {
     } catch (RTIexception e) {
       e.printStackTrace();
     }
+  }
+
+  @Override
+  public void start(Stage primaryStage) throws Exception {
+    try {
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+
   }
 }

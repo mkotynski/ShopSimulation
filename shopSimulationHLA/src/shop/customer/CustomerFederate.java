@@ -5,6 +5,7 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.Properties;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -114,7 +115,7 @@ public class CustomerFederate {
 
   private double randomTime() {
     Random r = new Random();
-    return (10 + (9 * r.nextDouble()));
+    return (Properties.MIN_CUSTOMER_GENERATION_TIME + (Properties.MAX_CUSTOMER_GENERATION_TIME - Properties.MIN_CUSTOMER_GENERATION_TIME) * r.nextDouble());
   }
 
   private LogicalTime convertTime(double time) {

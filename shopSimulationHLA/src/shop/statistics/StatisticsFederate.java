@@ -16,7 +16,7 @@ public class StatisticsFederate {
   public static final String READY_TO_RUN = "ReadyToRun";
 
   private RTIambassador rtiamb;
-  private StatisticsAmbassador fedamb;
+  private StatisticsAmbassador statisticsAmbassador;
   private final double timeStep = 10.0;
   private int stock = 10;
   private int storageHlaHandle;
@@ -37,13 +37,13 @@ public class StatisticsFederate {
       return;
     }
 
-    fedamb = new StatisticsAmbassador();
-    rtiamb.joinFederationExecution("StatisticsFederate", "ExampleFederation", fedamb);
-    log("Joined Federation as CustomerFederate");
+    statisticsAmbassador = new StatisticsAmbassador();
+    rtiamb.joinFederationExecution("StatisticsFederate", "ShoppingFederation", statisticsAmbassador);
+    log("Joined Federation as StatisticsFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
 
-    while (fedamb.isAnnounced == false) {
+    while (statisticsAmbassador.isAnnounced == false) {
       rtiamb.tick();
     }
 
@@ -51,7 +51,7 @@ public class StatisticsFederate {
 
     rtiamb.synchronizationPointAchieved(READY_TO_RUN);
     log("Achieved sync point: " + READY_TO_RUN + ", waiting for federation...");
-    while (fedamb.isReadyToRun == false) {
+    while (statisticsAmbassador.isReadyToRun == false) {
       rtiamb.tick();
     }
 
@@ -61,9 +61,28 @@ public class StatisticsFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
-    while (fedamb.running) {
-      advanceTime(randomTime());
-      sendInteraction(fedamb.federateTime + fedamb.federateLookahead);
+    while (statisticsAmbassador.running) {
+      double timeToAdvance = statisticsAmbassador.federateTime + timeStep;
+      advanceTime(timeToAdvance);
+
+      if (!statisticsAmbassador.externalEvents.isEmpty()) {
+        statisticsAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
+        for (ExternalEvent externalEvent : statisticsAmbassador.externalEvents) {
+          statisticsAmbassador.federateTime = externalEvent.getTime();
+          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_QUEUE_SIZE) {
+            //TODO odbior danych z eventu
+          }
+        }
+        statisticsAmbassador.externalEvents.clear();
+      }
+
+
+      if (statisticsAmbassador.grantedTime == timeToAdvance) {
+        timeToAdvance += statisticsAmbassador.federateLookahead;
+        //TODO SREDNI CZAS OCZEKIWANIA
+//        updateHLAObject(timeToAdvance);
+        statisticsAmbassador.federateTime = timeToAdvance;
+      }
       rtiamb.tick();
     }
   }
@@ -80,49 +99,40 @@ public class StatisticsFederate {
   }
 
   private void enableTimePolicy() throws RTIexception {
-    LogicalTime currentTime = convertTime(fedamb.federateTime);
-    LogicalTimeInterval lookahead = convertInterval(fedamb.federateLookahead);
+    LogicalTime currentTime = convertTime(statisticsAmbassador.federateTime);
+    LogicalTimeInterval lookahead = convertInterval(statisticsAmbassador.federateLookahead);
 
     this.rtiamb.enableTimeRegulation(currentTime, lookahead);
 
-    while (fedamb.isRegulating == false) {
+    while (statisticsAmbassador.isRegulating == false) {
       rtiamb.tick();
     }
 
     this.rtiamb.enableTimeConstrained();
 
-    while (fedamb.isConstrained == false) {
+    while (statisticsAmbassador.isConstrained == false) {
       rtiamb.tick();
     }
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int addProductHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    rtiamb.publishInteractionClass(addProductHandle);
-  }
+    int simObjectClassHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", simObjectClassHandle);
 
-  private void sendInteraction(double timeStep) throws RTIexception {
-    SuppliedParameters parameters =
-        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
-    Random random = new Random();
-    byte[] quantity = EncodingHelpers.encodeInt(random.nextInt(10) + 1);
+    AttributeHandleSet attributes = RtiFactoryFactory.getRtiFactory()
+        .createAttributeHandleSet();
+    attributes.add(numberOfQueuesHandle);
 
-    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.AddProduct");
-    int quantityHandle = rtiamb.getParameterHandle("quantity", interactionHandle);
-
-    parameters.add(quantityHandle, quantity);
-
-    LogicalTime time = convertTime(timeStep);
-    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), time);
+    rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
   }
 
   private void advanceTime(double timestep) throws RTIexception {
     log("requesting time advance for: " + timestep);
     // request the advance
-    fedamb.isAdvancing = true;
-    LogicalTime newTime = convertTime(fedamb.federateTime + timestep);
+    statisticsAmbassador.isAdvancing = true;
+    LogicalTime newTime = convertTime(statisticsAmbassador.federateTime + timestep);
     rtiamb.timeAdvanceRequest(newTime);
-    while (fedamb.isAdvancing) {
+    while (statisticsAmbassador.isAdvancing) {
       rtiamb.tick();
     }
   }
