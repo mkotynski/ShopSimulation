@@ -16,9 +16,7 @@
             (class RTIprivate)
             (class WaitingQueue
                 (attribute numberOfQueues reliable timestamp TestSpace)
-            )
-            (class Statistics
-                (attribute queueSize reliable timestamp TestSpace)
+                (attribute queuesSizes reliable timestamp TestSpace)
             )
         )
     )

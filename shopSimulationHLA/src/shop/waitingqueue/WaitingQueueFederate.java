@@ -5,12 +5,11 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.Properties;
 import shop.models.Customer;
 import shop.models.WaitingQueue;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.net.MalformedURLException;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -22,7 +21,6 @@ public class WaitingQueueFederate {
   private WaitingQueueAmbassador waitingQueueAmbassador;
   private final double timeStep = 1.0;
   private int numberOfQueues = 0; //wartosc startowa - pierwszy klient -> otworzenie pierwszej kasy/kolejki
-  private int maxQueueSize = 20;
   List<Integer> freeCashRegisterIds = new ArrayList<>();
   private List<WaitingQueue> waitingQueueList = new ArrayList<>();
   private int waitingQueueHLAObject = 0;
@@ -83,7 +81,6 @@ public class WaitingQueueFederate {
             this.addToShortesQueue(externalEvent.getCustomer());
           }
           if (externalEvent.getEventType() == ExternalEvent.EventType.FREE) {
-            log("war " + !freeCashRegisterIds.contains(externalEvent.getIdCashRegister()));
             freeCashRegisterIds.forEach(e -> System.out.print(e + ", "));
             if (!freeCashRegisterIds.contains(externalEvent.getIdCashRegister())) {
               freeCashRegisterIds.add(externalEvent.getIdCashRegister());
@@ -135,15 +132,23 @@ public class WaitingQueueFederate {
     this.waitingQueueHLAObject = rtiamb.registerObjectInstance(classHandle);
   }
 
-  private void updateHLAObject(double time) throws RTIexception {
+  private void updateHLAObject(double time) throws RTIexception, IOException {
+    List<Integer> queuesSizes = waitingQueueList.stream().map(WaitingQueue::getSize).collect(Collectors.toList());
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    ObjectOutputStream oos = new ObjectOutputStream(bos);
+    oos.writeObject(queuesSizes);
+
     SuppliedAttributes attributes =
         RtiFactoryFactory.getRtiFactory().createSuppliedAttributes();
 
     int classHandle = rtiamb.getObjectClass(waitingQueueHLAObject);
     int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", classHandle);
+    int queuesSizesHandle = rtiamb.getAttributeHandle("queuesSizes", classHandle);
     byte[] numberOfQueuesValue = EncodingHelpers.encodeInt(numberOfQueues);
+    byte[] queuesSizesValue = bos.toByteArray();
 
     attributes.add(numberOfQueuesHandle, numberOfQueuesValue);
+    attributes.add(queuesSizesHandle, queuesSizesValue);
     LogicalTime logicalTime = convertTime(time);
     rtiamb.updateAttributeValues(waitingQueueHLAObject, attributes, "actualize number of queues".getBytes(), logicalTime);
   }
@@ -162,7 +167,7 @@ public class WaitingQueueFederate {
 
   private void createWaitingQueue() {
     numberOfQueues++;
-    waitingQueueList.add(new WaitingQueue(numberOfQueues, maxQueueSize));
+    waitingQueueList.add(new WaitingQueue(numberOfQueues, Properties.MAX_QUEUE_SIZE));
     System.out.println("Nowa kolejka");
   }
 
@@ -197,10 +202,12 @@ public class WaitingQueueFederate {
   private void publishAndSubscribe() throws RTIexception {
     int classHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
     int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", classHandle);
+    int queuesSizesHandle = rtiamb.getAttributeHandle("queuesSizes", classHandle);
 
     AttributeHandleSet attributes =
         RtiFactoryFactory.getRtiFactory().createAttributeHandleSet();
     attributes.add(numberOfQueuesHandle);
+    attributes.add(queuesSizesHandle);
 
     rtiamb.publishObjectClass(classHandle, attributes);
 
