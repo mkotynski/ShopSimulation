@@ -4,16 +4,27 @@ import java.util.Comparator;
 
 public class ExternalEvent {
 
-  public enum EventType {UPDATE_QUEUE_SIZE}
+  public enum EventType {UPDATE_QUEUE_SIZE, WAITING_TIME}
 
   private int queueSize;
   private EventType eventType;
   private Double time;
+  private double waitingTime;
 
   public ExternalEvent(int queueSize, EventType eventType, Double time) {
     this.queueSize = queueSize;
     this.eventType = eventType;
     this.time = time;
+  }
+
+  public ExternalEvent(double waitingTime, EventType eventType, Double time) {
+    this.waitingTime = waitingTime;
+    this.eventType = eventType;
+    this.time = time;
+  }
+
+  public double getWaitingTime() {
+    return waitingTime;
   }
 
   public EventType getEventType() {

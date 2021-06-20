@@ -18,6 +18,9 @@
                 (attribute numberOfQueues reliable timestamp TestSpace)
                 (attribute queuesSizes reliable timestamp TestSpace)
             )
+            (class Statistics
+                (attribute avgWaitingTime reliable timestamp TestSpace)
+            )
         )
     )
     (interactions
@@ -39,6 +42,9 @@
                 (parameter customerId)
                 (parameter shoppingTime)
                 (parameter queueId)
+            )
+            (class SendWaitingTime reliable timestamp TestSpace
+                (parameter waitingTime)
             )
         )
     )
