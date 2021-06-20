@@ -6,6 +6,7 @@ import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
 import javafx.scene.chart.*;
+import javafx.scene.control.Label;
 import javafx.scene.layout.GridPane;
 import javafx.stage.Stage;
 import org.portico.impl.hla13.types.DoubleTime;
@@ -24,21 +25,30 @@ public class GuiFederate extends Application {
   private RTIambassador rtiamb;
   private GuiAmbassador guiAmbassador;
   private final double timeStep = 1.0;
-  private int lastNumberOfQueues = 0;
 
   NumberAxis xAxisTime = new NumberAxis();
   NumberAxis yAxisTime = new NumberAxis();
+  NumberAxis xAxisAvgTime = new NumberAxis();
+  NumberAxis yAxisAvgTime = new NumberAxis();
   CategoryAxis xAxisQueueSize = new CategoryAxis();
   NumberAxis yAxisQueueSize = new NumberAxis();
 
   LineChart<Number, Number> numberOfQueuesChart = new LineChart<>(xAxisTime, yAxisTime);
+  LineChart<Number, Number> avgWaitingTimeChart = new LineChart<>(xAxisAvgTime, yAxisAvgTime);
 
   BarChart<String, Number> queuesSizesBarChart = new BarChart<>(xAxisQueueSize, yAxisQueueSize);
 
   LineChart.Series<Number, Number> numberOfQueuesSeries = new LineChart.Series<>();
+  LineChart.Series<Number, Number> avgWaitingTimeSeries = new LineChart.Series<>();
   BarChart.Series<String, Number> queuesSizeSeries = new XYChart.Series<>();
-  private int numberOfQueue = 0;
 
+  String avgTimeString = "Sredni czas oczekiwania: ";
+  String numberOfQueueString = "Ilosc kolejek: ";
+
+  Label avgTimeLabel = new Label(avgTimeString);
+  Label numberOfQueueLabel = new Label(numberOfQueueString);
+
+  private int numberOfQueue = 0;
 
   public void runFederate() throws RTIexception {
 
@@ -90,8 +100,8 @@ public class GuiFederate extends Application {
         guiAmbassador.externalEvents.sort(new ExternalEvent.ExternalEventComparator());
         for (ExternalEvent externalEvent : guiAmbassador.externalEvents) {
           guiAmbassador.federateTime = externalEvent.getTime();
-          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_QUEUES_SIZES) {
-            updateGUI(externalEvent.getQueuesSizes().size(), externalEvent.getQueuesSizes(), guiAmbassador.federateTime, 0);
+          if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_VALUES) {
+            updateGUI(externalEvent.getQueuesSizes(), externalEvent.getAvgWaitingTime());
           }
         }
         guiAmbassador.externalEvents.clear();
@@ -100,8 +110,6 @@ public class GuiFederate extends Application {
 
       if (guiAmbassador.grantedTime == timeToAdvance) {
         timeToAdvance += guiAmbassador.federateLookahead;
-        //TODO SREDNI CZAS OCZEKIWANIA
-//        updateHLAObject(timeToAdvance);
         guiAmbassador.federateTime = timeToAdvance;
       }
       rtiamb.tick();
@@ -109,11 +117,19 @@ public class GuiFederate extends Application {
   }
 
   private void createGui() {
-    String numberOfQueuesTitle = new String("Ilosc kolejek");
-    String queuesSizesTitle = new String("Dlugosci kolejek");
+    String numberOfQueuesTitle = "Ilosc kolejek";
+    String queuesSizesTitle = "Dlugosci kolejek";
+    String avgWaitingTimeTitle = "Sredni czas oczekiwania";
 
     numberOfQueuesChart.setTitle(numberOfQueuesTitle);
     queuesSizesBarChart.setTitle(queuesSizesTitle);
+    avgWaitingTimeChart.setTitle(avgWaitingTimeTitle);
+
+    numberOfQueuesSeries.setName(numberOfQueuesTitle);
+    queuesSizeSeries.setName(queuesSizesTitle);
+    avgWaitingTimeSeries.setName(avgWaitingTimeTitle);
+
+    avgWaitingTimeChart.setCreateSymbols(false);
     queuesSizesBarChart.setAnimated(false);
 
     Platform.setImplicitExit(false);
@@ -123,8 +139,11 @@ public class GuiFederate extends Application {
       stage.setTitle("Shop");
       GridPane layout = new GridPane();
 
-      layout.add(numberOfQueuesChart, 1, 1);
-      layout.add(queuesSizesBarChart, 1, 2);
+      layout.add(avgTimeLabel, 1, 1);
+      layout.add(numberOfQueueLabel, 1, 2);
+      layout.add(numberOfQueuesChart, 1, 4);
+      layout.add(queuesSizesBarChart, 2, 4);
+      layout.add(avgWaitingTimeChart, 1,5);
 
       Scene scene = new Scene(layout);
       stage.setScene(scene);
@@ -133,23 +152,33 @@ public class GuiFederate extends Application {
 
     numberOfQueuesChart.getData().add(numberOfQueuesSeries);
     queuesSizesBarChart.getData().add(queuesSizeSeries);
+    avgWaitingTimeChart.getData().add(avgWaitingTimeSeries);
   }
 
-  public void updateGUI(int queuesNumber, List<Integer> queuesSizes, double time, int i) {
+  public void updateGUI(List<Integer> queuesSizes, double avgWaitingTime) {
     //log("aaa" + String.valueOf(queueSize)+" "+String.valueOf(avgWaitingTime));
-    runThread(queuesNumber, queuesSizes);
+    runThread(queuesSizes, avgWaitingTime);
   }
 
-  private void runThread(int queuesNumber, List<Integer> queuesSizes) {
+  private void runThread(List<Integer> queuesSizes, double avgWaitingTime) {
     Platform.runLater(() -> {
-      if (numberOfQueue != queuesNumber) {
-        numberOfQueuesSeries.getData().add(new LineChart.Data(guiAmbassador.federateTime, queuesNumber));
-        numberOfQueue = queuesNumber;
+      if(!queuesSizes.isEmpty()) {
+        if (numberOfQueue != queuesSizes.size()) {
+          numberOfQueuesSeries.getData().add(new LineChart.Data(guiAmbassador.federateTime, queuesSizes.size()));
+          numberOfQueue = queuesSizes.size();
+        }
+
+        numberOfQueueLabel.setText(numberOfQueueString + numberOfQueue);
+
+        queuesSizeSeries.getData().clear();
+        for (int i = 0; i < queuesSizes.size(); i++) {
+          queuesSizeSeries.getData().add(new XYChart.Data<>("Kolejka " + (i + 1), queuesSizes.get(i)));
+        }
       }
 
-      queuesSizeSeries.getData().clear();
-      for (int i = 0; i < queuesSizes.size(); i++) {
-        queuesSizeSeries.getData().add(new XYChart.Data<>("Kolejka " + (i + 1), queuesSizes.get(i)));
+      if(avgWaitingTime != -1) {
+        avgWaitingTimeSeries.getData().add(new LineChart.Data(guiAmbassador.federateTime, avgWaitingTime));
+        avgTimeLabel.setText(avgTimeString + avgWaitingTime);
       }
     });
   }
@@ -183,16 +212,27 @@ public class GuiFederate extends Application {
   }
 
   private void publishAndSubscribe() throws RTIexception {
-    int simObjectClassHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
-    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", simObjectClassHandle);
-    int queuesSizesHandle = rtiamb.getAttributeHandle("queuesSizes", simObjectClassHandle);
+    int simObjectClassWaitingQueueHandle = rtiamb.getObjectClassHandle("ObjectRoot.WaitingQueue");
+    int numberOfQueuesHandle = rtiamb.getAttributeHandle("numberOfQueues", simObjectClassWaitingQueueHandle);
+    int queuesSizesHandle = rtiamb.getAttributeHandle("queuesSizes", simObjectClassWaitingQueueHandle);
 
     AttributeHandleSet attributes = RtiFactoryFactory.getRtiFactory()
         .createAttributeHandleSet();
     attributes.add(numberOfQueuesHandle);
     attributes.add(queuesSizesHandle);
+    guiAmbassador.waitingQueueHandle = simObjectClassWaitingQueueHandle;
 
-    rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
+    rtiamb.subscribeObjectClassAttributes(simObjectClassWaitingQueueHandle, attributes);
+
+    int simObjectClassStatisticsHandle = rtiamb.getObjectClassHandle("ObjectRoot.Statistics");
+    int avgWaitingTimeHandle = rtiamb.getAttributeHandle("avgWaitingTime", simObjectClassStatisticsHandle);
+
+    AttributeHandleSet attributesStats = RtiFactoryFactory.getRtiFactory()
+        .createAttributeHandleSet();
+    attributesStats.add(avgWaitingTimeHandle);
+
+    guiAmbassador.avgWaitingTimeHandle = simObjectClassStatisticsHandle;
+    rtiamb.subscribeObjectClassAttributes(simObjectClassStatisticsHandle, attributesStats);
   }
 
   private void advanceTime(double timeToAdvance) throws RTIexception {
