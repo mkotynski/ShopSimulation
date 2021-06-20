@@ -79,7 +79,7 @@ public class StatisticsFederate {
           if (externalEvent.getEventType() == ExternalEvent.EventType.WAITING_TIME) {
             customerNumber++;
             waitingTimeSum += externalEvent.getWaitingTime();
-            updateHLAObject(waitingTimeSum / customerNumber, timeToAdvance);
+            updateHLAObject(waitingTimeSum / customerNumber, timeToAdvance + statisticsAmbassador.federateLookahead);
           }
         }
         statisticsAmbassador.externalEvents.clear();
@@ -149,6 +149,15 @@ public class StatisticsFederate {
     attributes.add(numberOfQueuesHandle);
 
     rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
+
+    int classHandle = rtiamb.getObjectClassHandle("ObjectRoot.Statistics");
+    int avgWaitingTimeHandle = rtiamb.getAttributeHandle("avgWaitingTime", classHandle);
+
+    AttributeHandleSet attributesStats =
+        RtiFactoryFactory.getRtiFactory().createAttributeHandleSet();
+    attributesStats.add(avgWaitingTimeHandle);
+
+    rtiamb.publishObjectClass(classHandle, attributesStats);
 
     int waitingTimeHandle = rtiamb.getInteractionClassHandle("InteractionRoot.SendWaitingTime");
     statisticsAmbassador.waitingTimeHandle = waitingTimeHandle;

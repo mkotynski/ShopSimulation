@@ -5,23 +5,22 @@ import java.util.List;
 
 public class ExternalEvent {
 
-  public enum EventType {UPDATE_NUMBER_OF_QUEUE, UPDATE_QUEUES_SIZES}
+  public enum EventType {UPDATE_VALUES}
 
-  private int numberOfQueue;
   List<Integer> queuesSizes;
   private ExternalEvent.EventType eventType;
   private Double time;
+  private double avgWaitingTime;
 
-  public ExternalEvent(int numberOfQueue, ExternalEvent.EventType eventType, Double time) {
-    this.numberOfQueue = numberOfQueue;
-    this.eventType = eventType;
-    this.time = time;
-  }
-
-  public ExternalEvent(List<Integer> queuesSizes, ExternalEvent.EventType eventType, Double time) {
+  public ExternalEvent(List<Integer> queuesSizes, ExternalEvent.EventType eventType, Double time, double avgWaitingTime) {
     this.queuesSizes = queuesSizes;
     this.eventType = eventType;
     this.time = time;
+    this.avgWaitingTime = avgWaitingTime;
+  }
+
+  public double getAvgWaitingTime() {
+    return avgWaitingTime;
   }
 
   public List<Integer> getQueuesSizes() {
@@ -30,10 +29,6 @@ public class ExternalEvent {
 
   public ExternalEvent.EventType getEventType() {
     return eventType;
-  }
-
-  public int getNumberOfQueues() {
-    return numberOfQueue;
   }
 
   public double getTime() {

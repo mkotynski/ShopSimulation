@@ -1,15 +1,19 @@
 package shop.gui;
 
-import shop.customer.CustomerFederate;
-import hla.rti.*;
+import hla.rti.ArrayIndexOutOfBounds;
+import hla.rti.EventRetractionHandle;
+import hla.rti.LogicalTime;
+import hla.rti.ReflectedAttributes;
 import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.NullFederateAmbassador;
 import org.portico.impl.hla13.types.DoubleTime;
+import shop.customer.CustomerFederate;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class GuiAmbassador extends NullFederateAmbassador {
@@ -27,6 +31,7 @@ public class GuiAmbassador extends NullFederateAmbassador {
   protected boolean running = true;
 
   protected int waitingQueueHandle;
+  protected int avgWaitingTimeHandle;
 
   protected ArrayList<ExternalEvent> externalEvents = new ArrayList<>();
 
@@ -87,40 +92,40 @@ public class GuiAmbassador extends NullFederateAmbassador {
   }
 
   @SuppressWarnings("unchecked")
-  public void reflectAttributeValues( int theObject,
-                                      ReflectedAttributes theAttributes,
-                                      byte[] tag,
-                                      LogicalTime theTime,
-                                      EventRetractionHandle retractionHandle ) {
-
+  public void reflectAttributeValues(int theObject,
+                                     ReflectedAttributes theAttributes,
+                                     byte[] tag,
+                                     LogicalTime theTime,
+                                     EventRetractionHandle retractionHandle) {
     try {
       double time = convertTime(theTime);
-      List<Integer> queuesSizes;
-      int newNumberOfQueue = EncodingHelpers.decodeInt(theAttributes.getValue(0));
-      byte[] queuesSizesValue = theAttributes.getValue(1);
+      if (theObject == waitingQueueHandle) {
+        List<Integer> queuesSizes;
+        byte[] queuesSizesValue = theAttributes.getValue(1);
 
-      ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(queuesSizesValue));
-      try{
-        queuesSizes = (List<Integer>) ois.readObject();
-      } finally {
-        ois.close();
-      }
+        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(queuesSizesValue));
+        try {
+          queuesSizes = (List<Integer>) ois.readObject();
+        } finally {
+          ois.close();
+        }
 
-      if(queuesSizesList.size() == queuesSizes.size()) {
-        for(int i=0 ; i < queuesSizesList.size(); i++) {
-          if(!queuesSizesList.get(i).equals(queuesSizes.get(i))) {
-            queuesSizesList = queuesSizes;
-            externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_QUEUES_SIZES, time));
-            break;
+        if (queuesSizesList.size() == queuesSizes.size()) {
+          for (int i = 0; i < queuesSizesList.size(); i++) {
+            if (!queuesSizesList.get(i).equals(queuesSizes.get(i))) {
+              queuesSizesList = queuesSizes;
+              externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_VALUES, time, -1));
+              break;
+            }
           }
+        } else {
+          externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_VALUES, time, -1));
         }
       } else {
-        externalEvents.add(new ExternalEvent(queuesSizes, ExternalEvent.EventType.UPDATE_QUEUES_SIZES, time));
-      }
+        double avgWaitingTime = EncodingHelpers.decodeDouble(theAttributes.getValue(0));
 
-      if (numberOfQueues < newNumberOfQueue) {
-        externalEvents.add(new ExternalEvent(newNumberOfQueue, ExternalEvent.EventType.UPDATE_NUMBER_OF_QUEUE, time));
-        numberOfQueues++;
+        externalEvents.add(new ExternalEvent(Collections.emptyList(), ExternalEvent.EventType.UPDATE_VALUES, time, avgWaitingTime));
+
       }
     } catch (ArrayIndexOutOfBounds | IOException | ClassNotFoundException arrayIndexOutOfBounds) {
       arrayIndexOutOfBounds.printStackTrace();
@@ -130,6 +135,11 @@ public class GuiAmbassador extends NullFederateAmbassador {
   @Override
   public void discoverObjectInstance(int theObject, int theObjectClass, String objectName) {
     System.out.println("Pojawil sie nowy obiekt typu WaitingQueue");
-    waitingQueueHandle = theObject;
+
+    if (theObjectClass == waitingQueueHandle) {
+      waitingQueueHandle = theObject;
+    } else {
+      avgWaitingTimeHandle = theObject;
+    }
   }
 }

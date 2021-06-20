@@ -90,10 +90,11 @@ public class WaitingQueueFederate {
         waitingQueueAmbassador.externalEvents.clear();
       }
 
-      for(int i=0; i < freeCashRegisterIds.size(); i++) {
-        if (waitingQueueList.get(freeCashRegisterIds.get(i)-1).isNotEmpty()) {
-          Customer customer = waitingQueueList.get(freeCashRegisterIds.get(i)-1).getFirstCustomer();
+      for (int i = 0; i < freeCashRegisterIds.size(); i++) {
+        if (waitingQueueList.get(freeCashRegisterIds.get(i) - 1).isNotEmpty()) {
+          Customer customer = waitingQueueList.get(freeCashRegisterIds.get(i) - 1).getFirstCustomer();
           startCustomerService(customer, freeCashRegisterIds.get(i), timeToAdvance);
+
           sendWaitingTime(waitingQueueAmbassador.federateTime - customer.getShoppingEndTime(), timeToAdvance);
           freeCashRegisterIds.remove(freeCashRegisterIds.get(i));
         }
@@ -157,6 +158,7 @@ public class WaitingQueueFederate {
 
 
   private void addToShortesQueue(Customer customer) throws Exception {
+    customer.setShoppingEndTime(waitingQueueAmbassador.federateTime);
     if (waitingQueueList.stream().filter(WaitingQueue::isFull).count() == numberOfQueues) {
       createWaitingQueue();
     }
