@@ -17,9 +17,11 @@ public class StatisticsFederate {
 
   private RTIambassador rtiamb;
   private StatisticsAmbassador statisticsAmbassador;
-  private final double timeStep = 10.0;
-  private int stock = 10;
-  private int storageHlaHandle;
+  private final double timeStep = 1.0;
+  private int customerNumber = 0;
+  private double waitingTimeSum = 0;
+
+  private int statisticsHLAObject = 0;
 
   public void runFederate() throws RTIexception {
 
@@ -38,7 +40,7 @@ public class StatisticsFederate {
     }
 
     statisticsAmbassador = new StatisticsAmbassador();
-    rtiamb.joinFederationExecution("StatisticsFederate", "ShoppingFederation", statisticsAmbassador);
+    rtiamb.joinFederationExecution("StatisticsFederate", "Shop-Federation", statisticsAmbassador);
     log("Joined Federation as StatisticsFederate");
 
     rtiamb.registerFederationSynchronizationPoint(READY_TO_RUN, null);
@@ -61,6 +63,8 @@ public class StatisticsFederate {
     publishAndSubscribe();
     log("Published and Subscribed");
 
+    registerObject();
+
     while (statisticsAmbassador.running) {
       double timeToAdvance = statisticsAmbassador.federateTime + timeStep;
       advanceTime(timeToAdvance);
@@ -72,6 +76,11 @@ public class StatisticsFederate {
           if (externalEvent.getEventType() == ExternalEvent.EventType.UPDATE_QUEUE_SIZE) {
             //TODO odbior danych z eventu
           }
+          if (externalEvent.getEventType() == ExternalEvent.EventType.WAITING_TIME) {
+            customerNumber++;
+            waitingTimeSum += externalEvent.getWaitingTime();
+            updateHLAObject(waitingTimeSum / customerNumber, timeToAdvance);
+          }
         }
         statisticsAmbassador.externalEvents.clear();
       }
@@ -79,12 +88,28 @@ public class StatisticsFederate {
 
       if (statisticsAmbassador.grantedTime == timeToAdvance) {
         timeToAdvance += statisticsAmbassador.federateLookahead;
-        //TODO SREDNI CZAS OCZEKIWANIA
-//        updateHLAObject(timeToAdvance);
         statisticsAmbassador.federateTime = timeToAdvance;
       }
       rtiamb.tick();
     }
+  }
+
+  private void registerObject() throws RTIexception {
+    int classHandle = rtiamb.getObjectClassHandle("ObjectRoot.Statistics");
+    this.statisticsHLAObject = rtiamb.registerObjectInstance(classHandle);
+  }
+
+  private void updateHLAObject(double avgWaitingTime, double time) throws RTIexception {
+    SuppliedAttributes attributes =
+        RtiFactoryFactory.getRtiFactory().createSuppliedAttributes();
+
+    int classHandle = rtiamb.getObjectClass(statisticsHLAObject);
+    int avgWaitingTImeHandle = rtiamb.getAttributeHandle("avgWaitingTime", classHandle);
+    byte[] avgWaitingTimeValue = EncodingHelpers.encodeDouble(avgWaitingTime);
+
+    attributes.add(avgWaitingTImeHandle, avgWaitingTimeValue);
+    LogicalTime logicalTime = convertTime(time);
+    rtiamb.updateAttributeValues(statisticsHLAObject, attributes, "actualize average waiting time".getBytes(), logicalTime);
   }
 
   private void waitForUser() {
@@ -124,13 +149,16 @@ public class StatisticsFederate {
     attributes.add(numberOfQueuesHandle);
 
     rtiamb.subscribeObjectClassAttributes(simObjectClassHandle, attributes);
+
+    int waitingTimeHandle = rtiamb.getInteractionClassHandle("InteractionRoot.SendWaitingTime");
+    statisticsAmbassador.waitingTimeHandle = waitingTimeHandle;
+    rtiamb.subscribeInteractionClass(waitingTimeHandle);
   }
 
-  private void advanceTime(double timestep) throws RTIexception {
-    log("requesting time advance for: " + timestep);
+  private void advanceTime(double timeToAdvance) throws RTIexception {
     // request the advance
     statisticsAmbassador.isAdvancing = true;
-    LogicalTime newTime = convertTime(statisticsAmbassador.federateTime + timestep);
+    LogicalTime newTime = convertTime(timeToAdvance);
     rtiamb.timeAdvanceRequest(newTime);
     while (statisticsAmbassador.isAdvancing) {
       rtiamb.tick();

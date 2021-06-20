@@ -92,7 +92,9 @@ public class WaitingQueueFederate {
 
       for(int i=0; i < freeCashRegisterIds.size(); i++) {
         if (waitingQueueList.get(freeCashRegisterIds.get(i)-1).isNotEmpty()) {
-          startCustomerService(waitingQueueList.get(freeCashRegisterIds.get(i)-1).getFirstCustomer(), freeCashRegisterIds.get(i), timeToAdvance);
+          Customer customer = waitingQueueList.get(freeCashRegisterIds.get(i)-1).getFirstCustomer();
+          startCustomerService(customer, freeCashRegisterIds.get(i), timeToAdvance);
+          sendWaitingTime(waitingQueueAmbassador.federateTime - customer.getShoppingEndTime(), timeToAdvance);
           freeCashRegisterIds.remove(freeCashRegisterIds.get(i));
         }
       }
@@ -171,6 +173,20 @@ public class WaitingQueueFederate {
     System.out.println("Nowa kolejka");
   }
 
+  private void sendWaitingTime(double waitingTime, double time) throws RTIexception {
+    SuppliedParameters parameters =
+        RtiFactoryFactory.getRtiFactory().createSuppliedParameters();
+    byte[] waitingTimeByteList = EncodingHelpers.encodeDouble(waitingTime);
+
+    int interactionHandle = rtiamb.getInteractionClassHandle("InteractionRoot.SendWaitingTime");
+    int waitingTimeHandle = rtiamb.getParameterHandle("waitingTime", interactionHandle);
+
+    parameters.add(waitingTimeHandle, waitingTimeByteList);
+
+    LogicalTime logicalTime = convertTime(time + waitingQueueAmbassador.federateLookahead);
+    rtiamb.sendInteraction(interactionHandle, parameters, "tag".getBytes(), logicalTime);
+  }
+
   private void waitForUser() {
     log(" >>>>>>>>>> Press Enter to Continue <<<<<<<<<<");
     BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
@@ -221,6 +237,9 @@ public class WaitingQueueFederate {
 
     int startCustomerServiceHandle = rtiamb.getInteractionClassHandle("InteractionRoot.StartCustomerService");
     rtiamb.publishInteractionClass(startCustomerServiceHandle);
+
+    int sendWaitingTime = rtiamb.getInteractionClassHandle("InteractionRoot.SendWaitingTime");
+    rtiamb.publishInteractionClass(sendWaitingTime);
   }
 
   private void advanceTime(double timeToAdvance) throws RTIexception {
