@@ -81,7 +81,6 @@ public class WaitingQueueFederate {
             this.addToShortesQueue(externalEvent.getCustomer());
           }
           if (externalEvent.getEventType() == ExternalEvent.EventType.FREE) {
-            freeCashRegisterIds.forEach(e -> System.out.print(e + ", "));
             if (!freeCashRegisterIds.contains(externalEvent.getIdCashRegister())) {
               freeCashRegisterIds.add(externalEvent.getIdCashRegister());
             }

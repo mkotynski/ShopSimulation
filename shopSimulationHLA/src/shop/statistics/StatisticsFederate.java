@@ -80,6 +80,7 @@ public class StatisticsFederate {
             customerNumber++;
             waitingTimeSum += externalEvent.getWaitingTime();
             updateHLAObject(waitingTimeSum / customerNumber, timeToAdvance + statisticsAmbassador.federateLookahead);
+            log("Sredni czas oczekiwania: " + (waitingTimeSum / customerNumber));
           }
         }
         statisticsAmbassador.externalEvents.clear();

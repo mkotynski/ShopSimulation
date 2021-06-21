@@ -5,6 +5,7 @@ import hla.rti.jlc.EncodingHelpers;
 import hla.rti.jlc.RtiFactoryFactory;
 import org.portico.impl.hla13.types.DoubleTime;
 import org.portico.impl.hla13.types.DoubleTimeInterval;
+import shop.Properties;
 import shop.models.CashRegister;
 
 import java.io.BufferedReader;
@@ -79,7 +80,7 @@ public class CashRegisterFederate {
 
             cashRegisterList.get(externalEvent.getCustomer().getCashRegisterId()-1).setBusy(true);
             cashRegisterList.get(externalEvent.getCustomer().getCashRegisterId()-1)
-                .setEndServiceTime(cashRegisterAmbassador.federateTime + (externalEvent.getCustomer().getShoppingTime()));
+                .setEndServiceTime(cashRegisterAmbassador.federateTime + ((externalEvent.getCustomer().getShoppingTime()) * Properties.SERVICE_TIME_CONSTANT));
 
             log("Rozpoczeto obsluge w kasie nr: " + (externalEvent.getCustomer().getCashRegisterId()) + " czas: " + cashRegisterAmbassador.federateTime);
           }

@@ -104,7 +104,6 @@ public class ShoppingAmbassador extends NullFederateAmbassador {
         int id = EncodingHelpers.decodeInt(theInteraction.getValue(0));
         double time = convertTime(theTime);
         externalEvents.add(new ExternalEvent(id, ExternalEvent.EventType.ADD, time));
-        log("Dodano nowego klienta, id: " + id);
       } catch (ArrayIndexOutOfBounds ignored) {
       }
     }

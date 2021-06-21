@@ -134,8 +134,6 @@ public class GuiAmbassador extends NullFederateAmbassador {
 
   @Override
   public void discoverObjectInstance(int theObject, int theObjectClass, String objectName) {
-    System.out.println("Pojawil sie nowy obiekt typu WaitingQueue");
-
     if (theObjectClass == waitingQueueHandle) {
       waitingQueueHandle = theObject;
     } else {

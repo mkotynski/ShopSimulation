@@ -118,7 +118,7 @@ public class GuiFederate extends Application {
 
   private void createGui() {
     String numberOfQueuesTitle = "Ilosc kolejek";
-    String queuesSizesTitle = "Dlugosci kolejek";
+    String queuesSizesTitle = "Ilość kas";
     String avgWaitingTimeTitle = "Sredni czas oczekiwania";
 
     numberOfQueuesChart.setTitle(numberOfQueuesTitle);
